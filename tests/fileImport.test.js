@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, normalizeRows, buildImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { parseCsv, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
   const csv='דוח תנועות לחשבון\nתאריך,תיאור,חובה,זכות,אסמכתא\n12.08.2026,רמי לוי,"487.30",,abc-1\n13.08.2026,החזר מחבר,,100,abc-2';
@@ -35,4 +35,24 @@ test('malformed rows remain visible and are not importable',()=>{
 test('explicit bank transfers to savings and investments are not proposed as expenses',()=>{
   const parsed=normalizeRows([['תאריך','תיאור','חובה','זכות'],['15.08.2026','העברה לחיסכון משפחתי','1,500',''],['16.08.2026','העברה לחשבון השקעות','800','']],{filename:'bank.csv'});
   assert.deepEqual(parsed.rows.map(row=>[row.financialType,row.allocationType,row.category]),[['savings_transfer','savings','חיסכון'],['investment_transfer','investment','השקעות']]);
+});
+
+test('a selected Android-like File reaches the parser with its filename intact',async()=>{
+  const text='דוח תנועות\nתאריך,תיאור,חובה,זכות\n12.08.2026,רמי לוי,487.30,';
+  const bytes=new TextEncoder().encode(text);
+  const file={name:'עובר ושב_13082026_1557.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer};
+  const logs=[];
+  const result=await createValidatedImportPreview(file,{logger:(label,data)=>logs.push({label,data})});
+  assert.equal(result.selected.filename,file.name);
+  assert.equal(result.preview.filename,file.name);
+  assert.equal(result.preview.summary.totalRows,1);
+  assert.equal(result.preview.summary.totalDebits,487.3);
+  assert.ok(logs.some(entry=>entry.data.stage==='selected'&&entry.data.filename===file.name));
+  assert.ok(logs.some(entry=>entry.data.stage==='parsed'&&entry.data.parserRowCount===3));
+});
+
+test('missing filename or zero valid rows cannot become a valid empty preview',async()=>{
+  const bytes=new TextEncoder().encode('not a bank export');
+  await assert.rejects(()=>createValidatedImportPreview({name:undefined,type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}}),error=>error.code==='missing_filename');
+  await assert.rejects(()=>createValidatedImportPreview({name:'empty.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}}),error=>error.code==='header_not_detected');
 });

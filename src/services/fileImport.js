@@ -10,3 +10,38 @@ export function parseAmount(value){if(value===null||value===undefined||value==='
 export function detectSource({filename='',headers=[]}){const text=clean(`${filename} ${headers.join(' ')}`);if(/כרטיס|אשראי|visa|mastercard|ישראכרט|max|cal/.test(text))return {source:'credit_card_import',confidence:.9};if(/בנק|חשבון|עו״ש|תאריך ערך|חובה|זכות/.test(text))return {source:'bank_import',confidence:.82};return {source:'unknown_financial_export',confidence:.35}}
 export function normalizeRows(rows,{filename='import',selectedSource=null}={}){const header=detectHeaderRow(rows);if(!header)return {error:'לא נמצאה שורת כותרות פיננסית',rows:[],malformed:rows.length};const headers=rows[header.index],detected=detectSource({filename,headers}),source=selectedSource||detected.source;const normalized=[];for(let index=header.index+1;index<rows.length;index++){const raw=rows[index],date=normalizeDate(raw[header.map.date]),description=String(raw[header.map.description]??'').trim();let amount=null,direction='unknown';if(header.map.debit!==undefined||header.map.credit!==undefined){const debit=parseAmount(raw[header.map.debit]),credit=parseAmount(raw[header.map.credit]);if(debit){amount=Math.abs(debit);direction='debit'}else if(credit){amount=Math.abs(credit);direction='credit'}}else{const signed=parseAmount(raw[header.map.amount]);if(signed!==null){amount=Math.abs(signed);direction=signed<0?'debit':'credit'}}const valid=Boolean(date&&description&&amount!==null&&amount!==0);const base={rowNumber:index+1,rawRow:raw,date,description,merchant:description,amount,direction,reference:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim():null,sourceAccount:header.map.card!==undefined?String(raw[header.map.card]??'').trim():header.map.account!==undefined?String(raw[header.map.account]??'').trim():null,sourceType:source,externalSourceId:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim()||null:null,valid,excluded:false};const allocation=valid?classifyCapitalAllocation(base):null,rule=valid&&!allocation?classifyWithRules(base):null;normalized.push({...base,financialType:allocation?.financialType||(direction==='debit'?'expense':'unknown'),allocationType:allocation?.allocationType||null,category:allocation?.category||rule?.category||null,classificationOrigin:allocation?.origin||rule?.origin||null,importStatus:valid?'ready':'malformed',warnings:valid?[]:['שורה לא ניתנת לפענוח']})}return {filename,headerRow:header.index,headers,columnMap:header.map,detectedSource:detected.source,sourceConfidence:detected.confidence,selectedSource:source,rows:normalized,malformed:normalized.filter(r=>!r.valid).length}}
 export function buildImportPreview(parsed,{existingTransactions=[],existingReceipts=[]}={}){const seen=new Set(existingTransactions.map(t=>`${t.date}|${t.amount}|${clean(t.merchant)}|${t.externalSourceId||''}`));const rows=parsed.rows.map(r=>{if(!r.valid)return r;const exact=seen.has(`${r.date}|${r.amount}|${clean(r.merchant)}|${r.externalSourceId||''}`)||Boolean(r.externalSourceId&&existingTransactions.some(t=>t.externalSourceId===r.externalSourceId));const receiptMatches=findReceiptMatches({purchaseDate:r.date,total:r.amount,merchant:r.merchant},existingTransactions.length?existingTransactions:[]);const receipt=existingReceipts.find(x=>Math.abs(x.total-r.amount)<.01&&x.purchaseDate===r.date);return {...r,duplicateStatus:exact?'existing':'new',importStatus:exact?'existing':'ready',matchingReceiptId:receipt?.id||null,possibleMatch:receiptMatches[0]?.id||null}});const included=rows.filter(r=>r.valid&&!r.excluded),debits=included.filter(r=>r.direction==='debit').reduce((s,r)=>s+r.amount,0),credits=included.filter(r=>r.direction==='credit').reduce((s,r)=>s+r.amount,0);return {...parsed,rows,summary:{totalRows:rows.length,totalDebits:debits,totalCredits:credits,newTransactions:rows.filter(r=>r.importStatus==='ready').length,existingTransactions:rows.filter(r=>r.importStatus==='existing').length,possibleDuplicates:rows.filter(r=>r.duplicateStatus==='possible').length,requiresReview:rows.filter(r=>r.financialType==='unknown'&&r.valid).length,malformed:rows.filter(r=>!r.valid).length},dateRange:{from:included.map(r=>r.date).sort()[0]||null,to:included.map(r=>r.date).sort().at(-1)||null}}}
+
+export class ImportFileError extends Error { constructor(message='לא הצלחנו לקרוא את הקובץ',code='file_read_failed'){super(message);this.name='ImportFileError';this.code=code} }
+const diagnostic=(logger,data)=>logger?.('[import diagnostic]',data);
+export async function readSelectedImportFile(file,{parseXlsx,logger=console.info}={}){
+  if(!file||typeof file!=='object')throw new ImportFileError('לא התקבל קובץ לבדיקת הייבוא','missing_file');
+  const filename=typeof file.name==='string'?file.name.trim():'';
+  const size=Number(file.size||0),type=String(file.type||'');
+  diagnostic(logger,{stage:'selected',fileExists:true,filename:filename||null,type:type||null,size});
+  if(!filename)throw new ImportFileError('לא הצלחנו לזהות את שם הקובץ','missing_filename');
+  if(size<=0)throw new ImportFileError('הקובץ ריק','empty_file');
+  let rows,characterCount=0,encoding=null;
+  if(filename.toLowerCase().endsWith('.xlsx')){
+    if(typeof parseXlsx!=='function')throw new ImportFileError('קורא XLSX אינו זמין','xlsx_reader_missing');
+    rows=await parseXlsx(file);encoding='xlsx';
+  }else{
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    diagnostic(logger,{stage:'read',filename,type,size,bytesRead:bytes.byteLength});
+    const candidates=['utf-8','windows-1255'].map(candidate=>{try{const text=new TextDecoder(candidate).decode(bytes).replace(/^\uFEFF/,'');return {encoding:candidate,text,rows:parseCsv(text),header:null}}catch{return null}}).filter(Boolean);
+    candidates.forEach(candidate=>candidate.header=detectHeaderRow(candidate.rows));
+    const selected=candidates.find(candidate=>candidate.header)||candidates[0];
+    rows=selected?.rows||[];characterCount=selected?.text.length||0;encoding=selected?.encoding||'unknown';
+  }
+  diagnostic(logger,{stage:'parsed',filename,type,size,characterCount,parserRowCount:Array.isArray(rows)?rows.length:0,encoding});
+  if(!Array.isArray(rows)||rows.length===0)throw new ImportFileError('לא נמצאו שורות בקובץ','empty_parse');
+  return {filename,type,size,characterCount,encoding,rows};
+}
+
+export async function createValidatedImportPreview(file,{parseXlsx,existingTransactions=[],existingReceipts=[],logger=console.info}={}){
+  const selected=await readSelectedImportFile(file,{parseXlsx,logger});
+  const parsed=normalizeRows(selected.rows,{filename:selected.filename});
+  diagnostic(logger,{stage:'normalized',filename:selected.filename,parserRowCount:selected.rows.length,normalizedRowCount:parsed.rows.length,validRowCount:parsed.rows.filter(row=>row.valid).length,errorCode:parsed.error?'header_not_detected':null});
+  if(parsed.error)throw new ImportFileError('לא הצלחנו לזהות את מבנה הקובץ','header_not_detected');
+  if(!parsed.rows.some(row=>row.valid))throw new ImportFileError('לא נמצאו עסקאות תקינות בקובץ','zero_valid_rows');
+  return {selected,parsed,preview:buildImportPreview(parsed,{existingTransactions,existingReceipts})};
+}
