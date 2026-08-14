@@ -1,0 +1,6 @@
+import test from 'node:test'; import assert from 'node:assert/strict';
+import { BitImportSource,PayBoxImportSource } from '../src/services/sourceAdapters.js';
+import { proposeReconciliation,classifyWalletMovement,ReconciliationRelationship } from '../src/services/reconciliation.js';
+test('Bit and PayBox have separate supported connector boundaries',()=>{assert.ok(new BitImportSource());assert.ok(new PayBoxImportSource())});
+test('wallet withdrawal and bank deposit reconcile as internal transfer',()=>{const wallet={sourceId:'bit-a',sourceType:'bit_wallet',occurredAt:'2026-08-12',amount:500,direction:'outgoing',counterparty:'חשבון משפחתי',reference:'abc'};const bank={sourceId:'bank',sourceType:'bank_import',occurredAt:'2026-08-12',amount:500,direction:'incoming',counterparty:'Bit',reference:'abc'};const result=proposeReconciliation(wallet,bank,{ownedSourceIds:['bit-a','bank']});assert.equal(result.relationship,ReconciliationRelationship.INTERNAL_TRANSFER);assert.equal(classifyWalletMovement(wallet,result).countInTotals,false)});
+test('incoming Bit money is not automatically income',()=>{const result=classifyWalletMovement({direction:'incoming'},null);assert.equal(result.financialType,'unclassified');assert.equal(result.requiresReview,true);assert.ok(result.candidates.includes('reimbursement'))});

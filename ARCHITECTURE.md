@@ -38,6 +38,8 @@ Sources are classified as `automatic`, `semi_automatic`, or `manual_reminder`. U
 
 `AUTOMATION_MAP.md` is the durable source/process inventory and implementation roadmap. `sourceAdapters.js` keeps acquisition replaceable (`FileAdapter` or future `OpenBankingAdapter`) while the shared pipeline retains all financial policy. Source health must prove a recent successful sync before “no transactions” can be considered valid data.
 
+Bit and PayBox use dedicated supported-only adapter boundaries. `SourceRecord` preserves every provider/bank/card/SMS representation for audit, while one `CanonicalFinancialEvent` controls totals. Reconciliation links source records instead of deleting them. Wallet funding and withdrawals between household-owned sources are transfers; incoming wallet money remains unclassified until reimbursement/repayment/gift/transfer/income rules establish its meaning.
+
 ## Android and privacy
 
 Each phone scans only its own SMS after explicit Android permission in a future phase. Filtering should happen on-device so unrelated conversations are not uploaded. Only likely receipts, invoice links, payment confirmations, and structured financial fields enter the shared pipeline. Gmail connections use independent OAuth grants for each household member. No SMS permissions, Gmail connections, or external credentials exist in this MVP.

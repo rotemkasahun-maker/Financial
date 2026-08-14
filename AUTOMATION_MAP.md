@@ -14,6 +14,8 @@ High-confidence safe results may proceed according to policy. Medium-confidence 
 |---|---|---|---|---|---|---|---|---|---|
 | Bank transactions | Household | Demo/file-import contract | Authorized Open Banking sync; file fallback | Automatic + fallback | Scheduled daily and manual refresh | Transactions, balances, pending/posted updates → canonical transactions | Provider transaction ID; account/date/amount/description fallback | Stale/failed/expired consent → issue; file-upload reminder; review uncertain transfers | Architecture ready; provider missing |
 | Credit-card transactions | Household | Demo/file-import contract | Authorized provider sync; file fallback | Automatic + fallback | Scheduled daily; statement monthly | Pending/posted charges and refunds → canonical transactions | Provider ID; card/date/amount/merchant/reference | Failure/stale → issue; monthly fallback reminder | Architecture ready; provider missing |
+| Bit | Relevant member / household | Mock `BitImportSource` | Supported Open Banking/API connection only | Automatic | Provider sync; daily health check | Incoming/outgoing transfers, balance, pending/booked records, metadata and external IDs → source records | External ID; wallet/date/amount/counterparty/reference; cross-source reconciliation | Expired/failed/stale/unsupported → issue and fallback reminder; ambiguous incoming money → review | Adapter contract ready; optional/not connected |
+| PayBox | Relevant member / household | Mock `PayBoxImportSource` | Supported direct/API connection when available | Automatic if supported; semi-automatic fallback | Provider sync or bank/card/SMS/email/file evidence | Sent/received money, withdrawal, funding, refunds and identifiable card activity → source records | External ID; wallet/date/amount/counterparty/reference; cross-source reconciliation | Unsupported/failed/stale → fallback-required issue; ambiguous movement → review | Adapter contract ready; optional/not connected |
 | Gmail A | User A | Mock source | Separate OAuth and relevance-filtered incremental sync | Automatic | Push/poll; daily health check | Relevant body/link/attachment → document/receipt envelope | Gmail message/attachment ID + content hash | Sync/permission failure → issue; uncertain relevance → review | Not connected |
 | Gmail B | User B | Mock source | Same, isolated OAuth grant | Automatic | Push/poll; daily health check | Same as Gmail A | Same as Gmail A | Same as Gmail A | Not connected |
 | Android SMS A | User A / phone A | Contract only | Private Android on-device filtering and sync | Automatic | New SMS + periodic health ping | Relevant structured fields/link only → envelope | Message fingerprint/device/source ID | No phone sync → stale issue; uncertain message stays local/review | Android client missing |
@@ -44,7 +46,19 @@ Bank and card sources select an adapter without changing domain logic:
 
 `CreditCardSource → FileAdapter | OpenBankingAdapter`
 
+`BitImportSource → SupportedWalletAdapter | reconciliation fallback`
+
+`PayBoxImportSource → SupportedWalletAdapter | File/Bank/Card/SMS/Email reconciliation fallback`
+
 Connectors produce source-neutral `ImportEnvelope` records. Provider credentials, consent and pagination remain inside adapters. The pipeline owns normalization, matching, classification, issue creation and source-health updates.
+
+## Cross-source reconciliation
+
+Every imported representation remains an immutable/auditable `SourceRecord`. Matching source records are linked to one `CanonicalFinancialEvent`; they are not deleted. The canonical event alone contributes to income/expense totals.
+
+Examples include a PayBox withdrawal plus its bank deposit, or one Bit purchase represented by a wallet record, card charge and SMS. Matching uses external IDs where available, then amount, time/date, counterparty/merchant, owned account/card, direction, reference and source metadata. Links carry confidence and a relationship: `same_event`, `internal_transfer`, `reimbursement`, or `duplicate_representation`. Medium confidence goes to review; low confidence remains separate and uncounted only when policy explicitly permits it.
+
+Wallet-to-household-bank withdrawals and household-bank/card funding of a wallet are internal transfers, not income or expense. Incoming wallet money is classified only after matching: it may be reimbursement, shared-purchase repayment, gift, transfer or actual income. It is never automatically treated as income.
 
 ## Automation status and health
 

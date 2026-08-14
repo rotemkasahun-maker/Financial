@@ -1,5 +1,5 @@
 export function calculateCompleteness({month,sources,expectedDocuments,issues}) {
-  const requiredSources=sources.filter(s=>['bank_import','credit_card_import','recurring_document'].includes(s.type));
+  const requiredSources=sources.filter(s=>s.requiredForCompleteness!==false&&['bank_import','credit_card_import','recurring_document','bit_wallet','paybox_wallet'].includes(s.type));
   const sourceChecks=requiredSources.map(s=>({id:s.id,label:s.name,complete:['up_to_date','connected','synced','active'].includes(s.status),state:s.status}));
   const documentChecks=expectedDocuments.filter(d=>d.period===month).map(d=>({id:d.id,label:`${d.documentType} — ${month}`,complete:d.received,state:d.received?'received':'missing'}));
   const openIssues=issues.filter(i=>i.status==='open');

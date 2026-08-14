@@ -1,4 +1,6 @@
 export function evaluateSourceHealth(source, now=new Date()) {
+  if(source.status==='unsupported_connection') return {status:'unsupported_connection',healthy:false,reason:'החיבור אינו נתמך'};
+  if(source.status==='fallback_required') return {status:'fallback_required',healthy:false,reason:'נדרש ייבוא חלופי'};
   if(source.status==='permission_expired') return {status:'permission_expired',healthy:false,reason:'ההרשאה פגה'};
   if(source.status==='failed'||source.consecutiveFailures>=3) return {status:'failed',healthy:false,reason:'סנכרון נכשל'};
   if(!source.lastSuccess) return {status:source.status||'waiting_connection',healthy:false,reason:'אין סנכרון מוצלח'};

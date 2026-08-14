@@ -16,5 +16,11 @@ export class GmailAdapter extends SourceAdapter {
 export class AndroidSmsAdapter extends SourceAdapter {
   async fetch() { throw new Error('Private Android client is not connected'); }
 }
+export class BitImportSource extends SourceAdapter {
+  async fetch() { throw new Error('Bit supported API/Open Banking connection is not connected'); }
+}
+export class PayBoxImportSource extends SourceAdapter {
+  async fetch() { throw new Error('PayBox supported direct/API connection is not connected; use reconciliation fallback'); }
+}
 
 export const selectFinancialAdapter=({kind,mode})=>mode==='file'?new FileAdapter({sourceType:kind==='bank'?'bank_import':'credit_card_import'}):new OpenBankingAdapter();
