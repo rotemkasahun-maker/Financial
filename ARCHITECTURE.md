@@ -51,3 +51,8 @@ Each phone scans only its own SMS after explicit Android permission in a future 
 ## Persistence evolution
 
 The UI consumes `FinanceDataService`, not Sheets directly. `MockFinanceDataService` can be replaced with a Google Sheets adapter and later an authenticated shared API/database without redesigning the screens. Stable IDs and `externalSourceId` provide idempotency across two phones and several connectors.
+# Historical learning / bootstrap
+
+Historical files enter a read-only analysis boundary and never the live ledger. `historicalLearning.js` groups normalized evidence, honors explicit user classifications over heuristics, detects conflicts, and emits confidence-scored proposals. Only an explicit approval converts a proposal into the existing persistent `ClassificationRule` structure with `origin: historical_bootstrap`; reconciliation patterns use the same rule structure with `ruleType: reconciliation`.
+
+The analysis API has no transaction, completeness, receipt-task, or XP write path. Raw files remain in browser memory for the analysis session and are not copied into the repository. Root-level CSV/XLSX files and private historical-data folders are ignored by Git.

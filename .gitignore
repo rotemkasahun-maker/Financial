@@ -39,3 +39,7 @@ Desktop.ini
 
 # Local receipt/uploads data
 uploads/
+historical-data/
+private-data/
+/*.csv
+/*.xlsx
