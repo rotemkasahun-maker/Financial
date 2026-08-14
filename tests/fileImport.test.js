@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseCsv, detectDelimiter, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
   const csv='דוח תנועות לחשבון\nתאריך,תיאור,חובה,זכות,אסמכתא\n12.08.2026,רמי לוי,"487.30",,abc-1\n13.08.2026,החזר מחבר,,100,abc-2';
@@ -65,7 +65,7 @@ test('parses a reusable current-account profile with metadata rows and semicolon
   const result=await createValidatedImportPreview({name:'bank-export.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}});
   assert.equal(result.selected.delimiter,';');
   assert.equal(result.parsed.headerRow,2);
-  assert.deepEqual(result.parsed.columnMap,{date:0,valueDate:1,description:2,reference:3,debit:4,credit:5});
+  assert.deepEqual(result.parsed.columnMap,{date:0,valueDate:1,description:2,reference:3,debit:4,credit:5,balance:6});
   assert.equal(result.preview.summary.totalRows,2);
   assert.equal(result.preview.summary.totalDebits,487.3);
   assert.equal(result.preview.summary.totalCredits,100);
@@ -78,4 +78,28 @@ test('detects a UTF-16LE bank export and quoted tab-separated headers',async()=>
   assert.equal(result.selected.encoding,'utf-16le');
   assert.equal(result.selected.delimiter,'\t');
   assert.equal(result.preview.summary.totalDebits,250);
+});
+
+test('parses the generic eight-column signed-amount bank profile with trailing delimiters',async()=>{
+  const bytes=await readFile(new URL('./fixtures/bank-signed-amount-trailing-delimiter.csv',import.meta.url));
+  assert.deepEqual([...bytes.subarray(0,3)],[0xef,0xbb,0xbf]);
+  const result=await createValidatedImportPreview({name:'current-account.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)},{logger:()=>{}});
+  assert.equal(result.selected.bom,'utf-8-bom');
+  assert.equal(result.selected.delimiter,',');
+  assert.equal(result.parsed.headers.length,8);
+  assert.ok(result.selected.rows.slice(1).every(row=>row.length===8));
+  assert.equal(result.parsed.columnMap.amount,3);
+  assert.equal(result.parsed.columnMap.balance,4);
+  assert.equal(result.parsed.columnMap.fee,6);
+  assert.equal(result.parsed.columnMap.channel,7);
+  assert.deepEqual(result.parsed.rows.map(row=>[row.amount,row.direction]),[[100,'debit'],[376.28,'credit'],[1800,'debit']]);
+  assert.deepEqual(result.parsed.rows.map(row=>row.runningBalance),[5439.11,5815.39,4015.39]);
+  assert.equal(result.preview.summary.totalDebits,1900);
+  assert.equal(result.preview.summary.totalCredits,376.28);
+});
+
+test('trailing empty fields are removed without collapsing internal blank fields',()=>{
+  assert.deepEqual(trimTrailingEmptyFields(['a','','c','','']),['a','','c']);
+  const rows=parseCsv('h1,h2,h3\n"value",,"last",');
+  assert.deepEqual(rows[1],['value','','last']);
 });

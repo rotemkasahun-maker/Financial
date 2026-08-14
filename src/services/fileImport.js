@@ -7,11 +7,14 @@ export const COLUMN_ALIASES={
   description:['בית עסק','תיאור','תאור','תיאור התנועה','תאור התנועה','תיאור תנועה','תאור תנועה','תיאור פעולה','תאור פעולה','פרטי פעולה','פרטי התנועה','פירוט','שם בית עסק','description','merchant'],
   debit:['חובה','חיוב','סכום חובה','סכום חיוב','חובה בשח','חיוב בשח','סכום חובה בשח','משיכה','debit'],
   credit:['זכות','זיכוי','סכום זכות','סכום זיכוי','זכות בשח','זיכוי בשח','סכום זכות בשח','הפקדה','credit'],
-  amount:['סכום','סכום עסקה','סכום תנועה','סכום הפעולה','סכום בשח','סכום בשקלים','amount'],
+  amount:['סכום','סכום עסקה','סכום תנועה','סכום הפעולה','סכום בשח','סכום בשקלים','זכות/חובה ₪','זכות חובה ₪','amount'],
+  balance:['יתרה','יתרה ₪','יתרה בשח','running balance','balance'],
   reference:['אסמכתא','מספר אסמכתא','אסמכתה','מס אסמכתא','reference'],
   card:['כרטיס','מספר כרטיס','card'],
   account:['חשבון','מספר חשבון','account'],
-  status:['סטטוס','מצב עסקה','transaction status']
+  status:['סטטוס','מצב עסקה','transaction status'],
+  fee:['עמלה','סכום עמלה','fee'],
+  channel:['ערוץ ביצוע','ערוץ','אופן ביצוע','channel']
 };
 
 const normalizeHeader=value=>String(value??'').replace(/^\uFEFF/,'').replace(/[\u200e\u200f\u202a-\u202e]/g,'').replace(/[״׳'"]/g,'').replace(/[.:()\[\]_/\\-]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
@@ -26,12 +29,14 @@ export function parseCsv(text,delimiter=detectDelimiter(text)){
     const character=source[index];
     if(character==='"'){if(quoted&&source[index+1]==='"'){cell+='"';index++}else quoted=!quoted}
     else if(character===delimiter&&!quoted){row.push(cell);cell=''}
-    else if((character==='\n'||character==='\r')&&!quoted){if(character==='\r'&&source[index+1]==='\n')index++;row.push(cell);if(row.some(value=>String(value).trim()))rows.push(row);row=[];cell=''}
+    else if((character==='\n'||character==='\r')&&!quoted){if(character==='\r'&&source[index+1]==='\n')index++;row.push(cell);row=trimTrailingEmptyFields(row);if(row.some(value=>String(value).trim()))rows.push(row);row=[];cell=''}
     else cell+=character;
   }
-  row.push(cell);if(row.some(value=>String(value).trim()))rows.push(row);
+  row.push(cell);row=trimTrailingEmptyFields(row);if(row.some(value=>String(value).trim()))rows.push(row);
   return rows;
 }
+
+export function trimTrailingEmptyFields(row){const normalized=[...row];while(normalized.length&&String(normalized.at(-1)??'').trim()==='')normalized.pop();return normalized}
 
 const countDelimiter=(line,delimiter)=>{let count=0,quoted=false;for(let index=0;index<line.length;index++){if(line[index]==='"'){if(quoted&&line[index+1]==='"')index++;else quoted=!quoted}else if(line[index]===delimiter&&!quoted)count++}return count};
 export function detectDelimiter(text){
@@ -49,7 +54,7 @@ export function detectHeaderRow(rows){
 
 export function normalizeDate(value){if(value instanceof Date&&!isNaN(value))return value.toISOString().slice(0,10);if(typeof value==='number'){const date=new Date(Date.UTC(1899,11,30)+value*86400000);return date.toISOString().slice(0,10)}const text=String(value??'').trim();const match=text.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);if(match){const year=match[3].length===2?`20${match[3]}`:match[3];return `${year}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`}if(/^\d{4}-\d{2}-\d{2}/.test(text))return text.slice(0,10);return null}
 export function parseAmount(value){if(value===null||value===undefined||value==='')return null;if(typeof value==='number')return Number.isFinite(value)?value:null;let text=String(value).trim().replace(/[₪\u200e\u200f\s]/g,'');const negative=/^\(.*\)$/.test(text)||text.endsWith('-');text=text.replace(/[(),]/g,'').replace(/-$/,'');const number=Number(text);return Number.isFinite(number)?(negative?-Math.abs(number):number):null}
-export function detectSource({filename='',headers=[]}){const text=clean(`${filename} ${headers.join(' ')}`);if(/כרטיס|אשראי|visa|mastercard|ישראכרט|max|cal/.test(text))return {source:'credit_card_import',confidence:.9};if(/בנק|חשבון|עוש|תאריך ערך|חובה|זכות/.test(text))return {source:'bank_import',confidence:.82};return {source:'unknown_financial_export',confidence:.35}}
+export function detectSource({filename='',headers=[]}){const text=clean(`${filename} ${headers.join(' ')}`);if(/כרטיס|אשראי|visa|mastercard|ישראכרט|max|cal/.test(text))return {source:'credit_card_import',confidence:.9};if(/בנק|חשבון|עוש|תאריך ערך|יום ערך|חובה|זכות|יתרה/.test(text))return {source:'bank_import',confidence:.82};return {source:'unknown_financial_export',confidence:.35}}
 
 export function normalizeRows(rows,{filename='import',selectedSource=null}={}){
   const header=detectHeaderRow(rows);if(!header)return {filename,error:'לא נמצאה שורת כותרות פיננסית',rows:[],malformed:rows.length,selectedSource:selectedSource||'unknown_financial_export'};
@@ -57,7 +62,7 @@ export function normalizeRows(rows,{filename='import',selectedSource=null}={}){
   for(let index=header.index+1;index<rows.length;index++){
     const raw=rows[index],date=normalizeDate(raw[header.map.date]),valueDate=header.map.valueDate===undefined?null:normalizeDate(raw[header.map.valueDate]),description=String(raw[header.map.description]??'').trim();let amount=null,direction='unknown';
     if(header.map.debit!==undefined||header.map.credit!==undefined){const debit=parseAmount(raw[header.map.debit]),credit=parseAmount(raw[header.map.credit]);if(debit){amount=Math.abs(debit);direction='debit'}else if(credit){amount=Math.abs(credit);direction='credit'}}else{const signed=parseAmount(raw[header.map.amount]);if(signed!==null){amount=Math.abs(signed);direction=signed<0?'debit':'credit'}}
-    const valid=Boolean(date&&description&&amount!==null&&amount!==0);const base={rowNumber:index+1,rawRow:raw,date,valueDate,description,merchant:description,amount,direction,reference:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim():null,sourceAccount:header.map.card!==undefined?String(raw[header.map.card]??'').trim():header.map.account!==undefined?String(raw[header.map.account]??'').trim():null,status:header.map.status!==undefined?String(raw[header.map.status]??'').trim():null,sourceType:source,externalSourceId:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim()||null:null,valid,excluded:false};
+    const valid=Boolean(date&&description&&amount!==null&&amount!==0);const base={rowNumber:index+1,rawRow:raw,date,valueDate,description,merchant:description,amount,direction,runningBalance:header.map.balance===undefined?null:parseAmount(raw[header.map.balance]),fee:header.map.fee===undefined?null:parseAmount(raw[header.map.fee]),channel:header.map.channel===undefined?null:String(raw[header.map.channel]??'').trim(),reference:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim():null,sourceAccount:header.map.card!==undefined?String(raw[header.map.card]??'').trim():header.map.account!==undefined?String(raw[header.map.account]??'').trim():null,status:header.map.status!==undefined?String(raw[header.map.status]??'').trim():null,sourceType:source,externalSourceId:header.map.reference!==undefined?String(raw[header.map.reference]??'').trim()||null:null,valid,excluded:false};
     const allocation=valid?classifyCapitalAllocation(base):null,rule=valid&&!allocation?classifyWithRules(base):null;
     normalized.push({...base,financialType:allocation?.financialType||(direction==='debit'?'expense':'unknown'),allocationType:allocation?.allocationType||null,category:allocation?.category||rule?.category||null,classificationOrigin:allocation?.origin||rule?.origin||null,importStatus:valid?'ready':'malformed',warnings:valid?[]:['שורה לא ניתנת לפענוח']});
   }
