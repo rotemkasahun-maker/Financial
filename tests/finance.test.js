@@ -1,0 +1,6 @@
+import test from 'node:test'; import assert from 'node:assert/strict';
+import { findReceiptMatches, calculateSummary, merchantSimilarity } from '../src/services/finance.js';
+test('matches a receipt to the existing transaction',()=>{const matches=findReceiptMatches({merchant:'רמי לוי שיווק השקמה',purchaseDate:'2026-08-12',total:487.30},[{id:'1',merchant:'רמי לוי',date:'2026-08-12',amount:487.30,financialType:'expense'}]);assert.equal(matches[0].id,'1');assert.equal(matches[0].confidence,'high')});
+test('does not match a different amount and date',()=>assert.equal(findReceiptMatches({merchant:'רמי לוי',purchaseDate:'2026-08-12',total:100},[{id:'1',merchant:'רמי לוי',date:'2026-07-01',amount:487.30,financialType:'expense'}]).length,0));
+test('reimbursement offsets expense and does not inflate income',()=>{const s=calculateSummary([{amount:620,financialType:'expense'},{amount:620,financialType:'reimbursement'},{amount:10000,financialType:'income'},{amount:500,financialType:'transfer'}]);assert.equal(s.netExpenses,0);assert.equal(s.income,10000);assert.equal(s.balance,10000)});
+test('merchant similarity handles prefixes',()=>assert.equal(merchantSimilarity('עזיזו לבנדר','עזיזו לבנדר מהגולן'),1));
