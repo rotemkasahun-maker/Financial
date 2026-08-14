@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { readFile } from 'node:fs/promises';
+import { parseCsv, detectDelimiter, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
   const csv='דוח תנועות לחשבון\nתאריך,תיאור,חובה,זכות,אסמכתא\n12.08.2026,רמי לוי,"487.30",,abc-1\n13.08.2026,החזר מחבר,,100,abc-2';
@@ -55,4 +56,26 @@ test('missing filename or zero valid rows cannot become a valid empty preview',a
   const bytes=new TextEncoder().encode('not a bank export');
   await assert.rejects(()=>createValidatedImportPreview({name:undefined,type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}}),error=>error.code==='missing_filename');
   await assert.rejects(()=>createValidatedImportPreview({name:'empty.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}}),error=>error.code==='header_not_detected');
+});
+
+test('parses a reusable current-account profile with metadata rows and semicolon delimiter',async()=>{
+  const text=await readFile(new URL('./fixtures/bank-current-account-structure.csv',import.meta.url),'utf8');
+  assert.equal(detectDelimiter(text),';');
+  const bytes=new TextEncoder().encode(text);
+  const result=await createValidatedImportPreview({name:'bank-export.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer},{logger:()=>{}});
+  assert.equal(result.selected.delimiter,';');
+  assert.equal(result.parsed.headerRow,2);
+  assert.deepEqual(result.parsed.columnMap,{date:0,valueDate:1,description:2,reference:3,debit:4,credit:5});
+  assert.equal(result.preview.summary.totalRows,2);
+  assert.equal(result.preview.summary.totalDebits,487.3);
+  assert.equal(result.preview.summary.totalCredits,100);
+});
+
+test('detects a UTF-16LE bank export and quoted tab-separated headers',async()=>{
+  const text='כותרת דוח\r\n"תאריך רישום"\t"תיאור פעולה"\t"חיוב"\t"זיכוי"\r\n"12.08.2026"\t"עסקה לדוגמה"\t"250.00"\t';
+  const body=Buffer.from(text,'utf16le'),bytes=Buffer.concat([Buffer.from([0xff,0xfe]),body]);
+  const result=await createValidatedImportPreview({name:'export.csv',type:'text/csv',size:bytes.byteLength,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)},{logger:()=>{}});
+  assert.equal(result.selected.encoding,'utf-16le');
+  assert.equal(result.selected.delimiter,'\t');
+  assert.equal(result.preview.summary.totalDebits,250);
 });
