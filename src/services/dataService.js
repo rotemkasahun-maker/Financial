@@ -45,12 +45,13 @@ export class MockFinanceDataService extends FinanceDataService {
 const approveFileImportBase=MockFinanceDataService.prototype.approveFileImport;
 MockFinanceDataService.prototype.approveFileImport=async function(preview,userId='demo-member-a'){
   const result=await approveFileImportBase.call(this,preview,userId);
+  for(const row of preview.rows.filter(item=>item.financialType==='credit_card_settlement')){const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant),event=this.canonicalEvents.find(item=>item.id===transaction?.canonicalEventId);if(transaction)Object.assign(transaction,{countInTotals:false,settlementOfSourceRecordIds:row.reconciliationMatchIds||[],classificationExplanation:row.classificationExplanation});if(event)Object.assign(event,{countInTotals:false,relationship:'credit_card_settlement',settlementOfSourceRecordIds:row.reconciliationMatchIds||[]})}
   for(const row of preview.rows.filter(item=>item.valid&&!item.excluded&&item.reviewStatus==='deferred')){
     const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant);
     if(!transaction)continue;Object.assign(transaction,{reviewStatus:'deferred',reviewReason:'לבדיקה מאוחר יותר',countInTotals:false});
     const ensured=ensureDeferredReviewTask(transaction,this.tasks,{dueAt:row.deferUntil||null});this.tasks=ensured.tasks;
   }
-  result.transactions=structuredClone(this.transactions);result.engagement=await this.getEngagementState();return result;
+  result.transactions=structuredClone(this.transactions);result.canonicalEvents=structuredClone(this.canonicalEvents);result.sourceRecords=structuredClone(this.sourceRecords);result.engagement=await this.getEngagementState();return result;
 };
 
 const saveClassificationRuleBase=MockFinanceDataService.prototype.saveClassificationRule;

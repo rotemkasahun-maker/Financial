@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, filterPreviewRows, applyReviewDecision, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, filterPreviewRows, applyReviewDecision, normalizeDate, parseAmount, parseFeeAmount } from '../src/services/fileImport.js';
 import { renderFileImport } from '../src/views/fileImportView.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
@@ -140,6 +140,13 @@ test('fee-only row accepts localized decimal comma, unicode minus and trailing c
   assert.equal(parsed.rows[0].financialType,'expense');
   assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
   assert.equal(parsed.rows[0].feeRepresentation,'fee_column_row');
+});
+
+test('fee-only row extracts a decorated bank fee amount without double counting metadata',()=>{
+  assert.equal(parseFeeAmount('עמלה: 1,35 ש״ח-'),-1.35);
+  const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪','עמלה'],['12/08/26','עמלת פעולה בערוץ ישיר','','עמלה: 1,35 ש״ח-'],['12/08/26','העברה לדוגמה','-100','2.00']],{filename:'synthetic.csv'});
+  assert.equal(parsed.rows[0].valid,true);assert.equal(parsed.rows[0].amount,1.35);assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
+  assert.equal(parsed.rows[1].feeRepresentation,'metadata_only');assert.equal(buildImportPreview(parsed).summary.totalDebits,101.35);
 });
 
 test('review filters return only actionable rows and preserve technical failures separately',()=>{

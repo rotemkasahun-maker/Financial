@@ -1,7 +1,7 @@
 /** Canonical models. Dates are ISO strings, currency defaults to ILS. */
 export const FinancialType = Object.freeze({
-  EXPENSE: 'expense', INCOME: 'income', FAMILY_SUPPORT: 'family_support', GOVERNMENT_BENEFIT: 'government_benefit', GIFT: 'gift', REIMBURSEMENT: 'reimbursement', TRANSFER: 'transfer', REFUND: 'refund',
-  SAVINGS_TRANSFER: 'savings_transfer', INVESTMENT_TRANSFER: 'investment_transfer', CAPITAL_ALLOCATION: 'capital_allocation'
+  EXPENSE: 'expense', INCOME: 'income', FAMILY_SUPPORT: 'family_support', GOVERNMENT_BENEFIT: 'government_benefit', BANK_CREDIT: 'bank_credit', GIFT: 'gift', REIMBURSEMENT: 'reimbursement', TRANSFER: 'transfer', REFUND: 'refund',
+  CREDIT_CARD_SETTLEMENT:'credit_card_settlement', SAVINGS_TRANSFER: 'savings_transfer', INVESTMENT_TRANSFER: 'investment_transfer', CAPITAL_ALLOCATION: 'capital_allocation'
 });
 
 export const createReceipt = (data) => ({
@@ -20,5 +20,5 @@ export const createImportEnvelope = ({ sourceType, payload, userId, deviceId, so
 export const createExpectedDocument = data => ({id:crypto.randomUUID(),documentType:'',frequency:'monthly',period:'',expectedDate:'',owner:'',received:false,fileId:null,extractedData:null,reminderState:'upcoming',...data});
 export const createImportIssue = data => ({id:crypto.randomUUID(),type:'unknown',severity:'warning',title:'',description:'',sourceId:null,status:'open',createdAt:new Date().toISOString(),...data});
 export const createReminderTask = data => ({id:crypto.randomUUID(),type:'manual_followup',title:'',period:null,dueDate:null,status:'upcoming',notifyAndroidLater:true,...data});
-export const createCanonicalFinancialEvent = data => {const event={id:crypto.randomUUID(),date:'',amount:0,currency:'ILS',financialType:'unclassified',countInTotals:false,linkedSourceRecordIds:[],createdAt:new Date().toISOString(),...data};if(['transfer','savings_transfer','investment_transfer','capital_allocation'].includes(event.financialType))event.countInTotals=false;return event};
+export const createCanonicalFinancialEvent = data => {const event={id:crypto.randomUUID(),date:'',amount:0,currency:'ILS',financialType:'unclassified',countInTotals:false,linkedSourceRecordIds:[],createdAt:new Date().toISOString(),...data};if(['transfer','credit_card_settlement','savings_transfer','investment_transfer','capital_allocation'].includes(event.financialType))event.countInTotals=false;return event};
 export const createFinancialSourceRecord = data => ({id:crypto.randomUUID(),sourceId:'',sourceType:'',externalTransactionId:null,occurredAt:'',amount:0,currency:'ILS',direction:'unknown',canonicalEventId:null,importedAt:new Date().toISOString(),...data});

@@ -3,7 +3,7 @@ const tokens=value=>new Set(normalize(value).split(' ').filter(token=>token.leng
 const similarity=(left,right)=>{const a=tokens(left),b=tokens(right);if(!a.size||!b.size)return 0;const common=[...a].filter(token=>b.has(token)).length;return common/Math.max(a.size,b.size)};
 const directionOf=row=>['credit','incoming'].includes(row.direction)?'incoming':['debit','outgoing'].includes(row.direction)?'outgoing':'unknown';
 
-export const RuleTarget=Object.freeze({FAMILY_SUPPORT:'family_support',GOVERNMENT_BENEFIT:'government_benefit',INCOME:'income',REIMBURSEMENT:'reimbursement',GIFT:'gift',TRANSFER:'transfer',REFUND:'refund',EXPENSE:'expense',SAVINGS:'savings_transfer',INVESTMENT:'investment_transfer'});
+export const RuleTarget=Object.freeze({FAMILY_SUPPORT:'family_support',GOVERNMENT_BENEFIT:'government_benefit',BANK_CREDIT:'bank_credit',INCOME:'income',REIMBURSEMENT:'reimbursement',GIFT:'gift',TRANSFER:'transfer',REFUND:'refund',EXPENSE:'expense',SAVINGS:'savings_transfer',INVESTMENT:'investment_transfer'});
 
 export function createClassificationRule({id=crypto.randomUUID(),householdId='demo-household',userId='demo-member-a',target,category,description='',counterparty='',sourceType='',sourceAccount='',direction,typicalAmount=null,amountTolerance=null,frequency='unknown',referencePattern='',enabled=true}={}){
   const amount=typicalAmount===null?null:Math.abs(Number(typicalAmount));
@@ -12,7 +12,7 @@ export function createClassificationRule({id=crypto.randomUUID(),householdId='de
 
 export function ruleFromReviewDecision(row,decision){return createClassificationRule({target:decision,category:categoryFor(decision),description:row.description,counterparty:row.merchant,sourceType:row.sourceType,direction:directionOf(row),typicalAmount:row.amount,frequency:row.recurringFrequency||'unknown',referencePattern:row.reference?.replace(/\d+/g,'#')||''});}
 
-export function categoryFor(target){return ({family_support:'עזרה מההורים',government_benefit:'קצבאות ומענקים',income:'הכנסה שוטפת',reimbursement:'החזר',gift:'מתנה',transfer:'העברה פנימית',refund:'זיכוי',expense:'כללי',savings_transfer:'חיסכון',investment_transfer:'השקעות'})[target]||'ללא קטגוריה'}
+export function categoryFor(target){return ({family_support:'עזרה מההורים',government_benefit:'קצבאות ומענקים',bank_credit:'ריבית וזיכויים מהבנק',income:'הכנסה שוטפת',reimbursement:'החזר',gift:'מתנה',transfer:'העברה פנימית',refund:'זיכוי',expense:'כללי',savings_transfer:'חיסכון',investment_transfer:'השקעות'})[target]||'ללא קטגוריה'}
 
 export function matchClassificationRule(rule,row){
   if(!rule?.enabled||rule.direction!==directionOf(row))return {confidence:'none',score:0};
