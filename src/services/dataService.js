@@ -1,13 +1,15 @@
 import { transactions, receipts, recurring } from '../data/mockData.js';
 import { importSources, expectedDocuments, importRuns, importIssues, reminderTasks } from '../data/ingestionMockData.js';
 import { tasks, xpEvents, userScores, challenges, achievements, notificationRules, rewardConfig } from '../data/gamificationMockData.js';
-import { completeReceiptTask, completeTaskExactlyOnce } from './taskEngine.js';
+import { completeReceiptTask, completeTaskExactlyOnce, ensureDeferredReviewTask, closeDeferredReviewTask } from './taskEngine.js';
 import { createSourceRecord, createCanonicalEvent } from './reconciliation.js';
-import { upsertClassificationRule, disableClassificationRule } from './classificationRules.js';
+import { upsertClassificationRule, disableClassificationRule, applySavedClassificationRules } from './classificationRules.js';
+import { rerunDeferredReconciliation } from './reviewReconciliation.js';
 
 const RULE_STORAGE_KEY='family-finance:classification-rules:v1';
-const loadRules=()=>{try{return JSON.parse(globalThis.localStorage?.getItem(RULE_STORAGE_KEY)||'[]')}catch{return []}};
-const persistRules=rules=>{try{globalThis.localStorage?.setItem(RULE_STORAGE_KEY,JSON.stringify(rules))}catch{/* In-memory fallback. */}};
+let memoryRuleStore=[];
+const loadRules=()=>{try{const stored=globalThis.localStorage?.getItem(RULE_STORAGE_KEY);return stored?JSON.parse(stored):structuredClone(memoryRuleStore)}catch{return structuredClone(memoryRuleStore)}};
+const persistRules=rules=>{memoryRuleStore=structuredClone(rules);try{globalThis.localStorage?.setItem(RULE_STORAGE_KEY,JSON.stringify(rules))}catch{/* In-memory fallback. */}};
 
 export class FinanceDataService {
   async getTransactions() { throw new Error('Not implemented'); }
@@ -35,9 +37,39 @@ export class MockFinanceDataService extends FinanceDataService {
     if (linkedId) this.transactions = this.transactions.map(t => t.id === linkedId ? {...t, receiptId:saved.id} : t);
     else this.transactions.unshift({id:crypto.randomUUID(), date:saved.purchaseDate, merchant:saved.merchant, description:'נוצר מקבלה לאחר בדיקה', amount:Number(saved.total), currency:'ILS', direction:'debit', financialType:'expense', category:saved.category || 'כללי', source:'קבלה', sourceType:saved.sourceMetadata?.sourceType || 'manual_upload', sourceAccount:saved.sourceMetadata?.userId || null, householdId:saved.sourceMetadata?.householdId, userId:saved.sourceMetadata?.userId, deviceId:saved.sourceMetadata?.deviceId, importedAt:saved.sourceMetadata?.importedAt, receiptId:saved.id, reimbursementStatus:'none'});
     if(linkedId){const result=completeReceiptTask(linkedId,{tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores});this.tasks=result.tasks;this.xpEvents=result.xpEvents;this.userScores=result.userScores;this.lastXPEvent=result.xpEvent}
+    await this.rerunDeferredItems({receipts:[saved]});
     return structuredClone(saved);
   }
 }
+
+const approveFileImportBase=MockFinanceDataService.prototype.approveFileImport;
+MockFinanceDataService.prototype.approveFileImport=async function(preview,userId='demo-member-a'){
+  const result=await approveFileImportBase.call(this,preview,userId);
+  for(const row of preview.rows.filter(item=>item.valid&&!item.excluded&&item.reviewStatus==='deferred')){
+    const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant);
+    if(!transaction)continue;Object.assign(transaction,{reviewStatus:'deferred',reviewReason:'לבדיקה מאוחר יותר',countInTotals:false});
+    const ensured=ensureDeferredReviewTask(transaction,this.tasks,{dueAt:row.deferUntil||null});this.tasks=ensured.tasks;
+  }
+  result.transactions=structuredClone(this.transactions);result.engagement=await this.getEngagementState();return result;
+};
+
+const saveClassificationRuleBase=MockFinanceDataService.prototype.saveClassificationRule;
+MockFinanceDataService.prototype.saveClassificationRule=async function(rule){
+  const rules=await saveClassificationRuleBase.call(this,rule);
+  this.transactions=this.transactions.map(transaction=>{if(transaction.reviewStatus!=='deferred')return transaction;const matched=applySavedClassificationRules(transaction,rules);if(matched?.confidence!=='high')return transaction;this.tasks=closeDeferredReviewTask(transaction.id,this.tasks);return {...transaction,financialType:matched.financialType,category:matched.category,reviewStatus:'resolved_automatically',classificationExplanation:'פתרנו את התעלומה הזאת בשבילך ✓',countInTotals:!['transfer','unknown'].includes(matched.financialType)}});
+  return rules;
+};
+
+MockFinanceDataService.prototype.rerunDeferredItems=async function(evidence){
+  this.transactions=this.transactions.map(transaction=>{if(transaction.reviewStatus!=='deferred')return transaction;const resolved=rerunDeferredReconciliation(transaction,evidence);if(resolved.reviewStatus==='resolved_automatically')this.tasks=closeDeferredReviewTask(transaction.id,this.tasks);return resolved});
+  return structuredClone({transactions:this.transactions,engagement:await this.getEngagementState()});
+};
+
+MockFinanceDataService.prototype.resolveDeferredTransaction=async function(transactionId,decision){
+  const transaction=this.transactions.find(item=>item.id===transactionId);if(!transaction)throw new Error('Transaction not found');Object.assign(transaction,{financialType:decision.financialType,category:decision.category,reviewStatus:'resolved',countInTotals:!['transfer','unknown'].includes(decision.financialType)});
+  const task=this.tasks.find(item=>item.type==='transaction_review'&&item.relatedRecordId===transactionId);if(task){const completed=completeTaskExactlyOnce({taskId:task.id,tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores});this.tasks=completed.tasks;this.xpEvents=completed.xpEvents;this.userScores=completed.userScores;this.lastXPEvent=completed.xpEvent}
+  return structuredClone({transaction,engagement:await this.getEngagementState()});
+};
 
 /** Future adapter: implement these methods against the approved Google Apps Script/API endpoint. */
 export class GoogleSheetsFinanceDataService extends FinanceDataService {

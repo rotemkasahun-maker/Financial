@@ -132,6 +132,16 @@ test('a fee-only column can represent a dedicated fee row',()=>{
   assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
 });
 
+test('fee-only row accepts localized decimal comma, unicode minus and trailing cells',()=>{
+  const csv='תאריך,תיאור התנועה,זכות/חובה ₪,עמלה,ערוץ ביצוע\n"12/08/26","עמלת פעולה בערוץ ישיר","","−1,35","דיגיטלי",,';
+  const parsed=normalizeRows(parseCsv(csv),{filename:'synthetic-bank.csv'});
+  assert.equal(parsed.rows[0].valid,true);
+  assert.equal(parsed.rows[0].amount,1.35);
+  assert.equal(parsed.rows[0].financialType,'expense');
+  assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
+  assert.equal(parsed.rows[0].feeRepresentation,'fee_column_row');
+});
+
 test('review filters return only actionable rows and preserve technical failures separately',()=>{
   const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪'],['12/08/26','העברה שהתקבלה','500'],['13/08/26','זיכוי אחר','120'],['14/08/26','עסקה רגילה','-80'],['תאריך שגוי','שורה שבורה',''],['15/08/26','עמלת בנק','-3']],{filename:'bank.csv'});
   const preview=buildImportPreview(parsed);

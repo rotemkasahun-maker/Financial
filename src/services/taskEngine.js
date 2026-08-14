@@ -13,6 +13,16 @@ export function ensureMissingReceiptTask(transaction,tasks,{now=new Date(),waiti
   return {tasks:[...tasks,task],created:task};
 }
 
+export function ensureDeferredReviewTask(transaction,tasks,{now=new Date(),dueAt=null,rewardXP=10}={}){
+  const key=`transaction_review:${transaction.id}`;const existing=tasks.find(task=>task.dedupeKey===key);if(existing)return {tasks,created:null};
+  const task={id:crypto.randomUUID(),dedupeKey:key,type:'transaction_review',ownerId:inferTaskOwner(transaction),title:'תעלומה קטנה מחכה לפיצוח',explanation:`${transaction.merchant||transaction.description} · ${transaction.amount} ₪`,relatedRecordType:'transaction',relatedRecordId:transaction.id,priority:'normal',dueAt:dueAt||null,status:TaskStatus.SNOOZED,xpReward:rewardXP,deepLink:{route:'transaction_review',params:{transactionId:transaction.id}},notificationState:dueAt?'snoozed':'tasks_only',notificationCount:0,createdAt:now.toISOString()};
+  return {tasks:[...tasks,task],created:task};
+}
+
+export function closeDeferredReviewTask(transactionId,tasks,now=new Date()){return tasks.map(task=>task.type==='transaction_review'&&task.relatedRecordId===transactionId&&task.status!==TaskStatus.COMPLETED?{...task,status:TaskStatus.COMPLETED,completedAt:now.toISOString(),notificationState:'completed',resolvedAutomatically:true,xpAwarded:false}:task)}
+export function batchReviewReminders(tasks,now=new Date()){const due=tasks.filter(task=>task.type==='transaction_review'&&[TaskStatus.OPEN,TaskStatus.SNOOZED].includes(task.status)&&task.dueAt&&new Date(task.dueAt)<=now&&task.notificationState!=='completed');return due.length?{dedupeKey:`review_batch:${now.toISOString().slice(0,10)}`,title:`יש ${due.length} תעלומות קטנות לפיצוח — בערך דקה`,taskIds:due.map(task=>task.id),actions:['עכשיו','מחר','בסוף השבוע','אחר כך']}:null}
+export const madridGameProgress=xpEvents=>({xp:xpEvents.reduce((sum,event)=>sum+Number(event.amount||0),0),label:'הדרך למדריד',financialSavingsImpact:0});
+
 export function completeTaskExactlyOnce({taskId,tasks,xpEvents,userScores,now=new Date()}){
   const task=tasks.find(t=>t.id===taskId);if(!task||task.status===TaskStatus.COMPLETED)return {tasks,xpEvents,userScores,xpEvent:null};
   const updatedTasks=tasks.map(t=>t.id===taskId?{...t,status:TaskStatus.COMPLETED,completedAt:now.toISOString(),notificationState:'completed',xpAwarded:true}:t);
