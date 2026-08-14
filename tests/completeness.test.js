@@ -1,0 +1,4 @@
+import test from 'node:test'; import assert from 'node:assert/strict';
+import { calculateCompleteness } from '../src/services/completeness.js';
+test('monthly completeness includes sources, documents and issues',()=>{const result=calculateCompleteness({month:'2026-08',sources:[{id:'bank',name:'בנק',type:'bank_import',status:'up_to_date'}],expectedDocuments:[{id:'doc',documentType:'מסמך',period:'2026-08',received:false}],issues:[{status:'open'}]});assert.equal(result.total,3);assert.equal(result.completed,1);assert.equal(result.status,'incomplete')});
+test('received document and no issues produce complete month',()=>{const result=calculateCompleteness({month:'2026-08',sources:[{id:'bank',name:'בנק',type:'bank_import',status:'up_to_date'}],expectedDocuments:[{id:'doc',documentType:'מסמך',period:'2026-08',received:true}],issues:[]});assert.equal(result.percent,100);assert.equal(result.status,'complete')});

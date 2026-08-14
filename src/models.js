@@ -15,3 +15,7 @@ export const createImportEnvelope = ({ sourceType, payload, userId, deviceId, so
   id: crypto.randomUUID(), householdId:'demo-household', userId, deviceId, sourceType,
   sourceAccount, externalSourceId, importedAt:new Date().toISOString(), status:'received', payload
 });
+
+export const createExpectedDocument = data => ({id:crypto.randomUUID(),documentType:'',frequency:'monthly',period:'',expectedDate:'',owner:'',received:false,fileId:null,extractedData:null,reminderState:'upcoming',...data});
+export const createImportIssue = data => ({id:crypto.randomUUID(),type:'unknown',severity:'warning',title:'',description:'',sourceId:null,status:'open',createdAt:new Date().toISOString(),...data});
+export const createReminderTask = data => ({id:crypto.randomUUID(),type:'manual_followup',title:'',period:null,dueDate:null,status:'upcoming',notifyAndroidLater:true,...data});

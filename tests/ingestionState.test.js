@@ -1,0 +1,3 @@
+import test from 'node:test'; import assert from 'node:assert/strict';
+import { MockFinanceDataService } from '../src/services/dataService.js';
+test('receiving an expected document completes reminder and resolves its issue',async()=>{const service=new MockFinanceDataService();const state=await service.receiveExpectedDocument('doc-benefit-2026-08','benefit.pdf');const doc=state.expectedDocuments.find(d=>d.id==='doc-benefit-2026-08');const reminder=state.reminders.find(t=>t.expectedDocumentId===doc.id);const issue=state.issues.find(i=>i.expectedDocumentId===doc.id);assert.equal(doc.received,true);assert.equal(reminder.status,'completed');assert.equal(issue.status,'resolved')});
