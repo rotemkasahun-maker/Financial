@@ -1,8 +1,10 @@
 import { readFile, access } from 'node:fs/promises';
-const files=['index.html','styles.css','src/app.js','src/services/dataService.js','src/services/finance.js','src/services/receiptExtraction.js','src/services/importPipeline.js','src/services/completeness.js','src/services/sourceAdapters.js','src/services/sourceHealth.js','src/services/reconciliation.js','src/services/classification.js','src/services/taskEngine.js','src/data/ingestionMockData.js','src/data/gamificationMockData.js','src/views/tasksView.js','ARCHITECTURE.md','AUTOMATION_MAP.md','GAMIFICATION.md'];
+const files=['index.html','styles.css','src/app.js','src/services/dataService.js','src/services/finance.js','src/services/receiptExtraction.js','src/services/importPipeline.js','src/services/fileImport.js','src/services/completeness.js','src/services/sourceAdapters.js','src/services/sourceHealth.js','src/services/reconciliation.js','src/services/classification.js','src/services/taskEngine.js','src/data/ingestionMockData.js','src/data/gamificationMockData.js','src/views/tasksView.js','src/views/fileImportView.js','ARCHITECTURE.md','AUTOMATION_MAP.md','GAMIFICATION.md','NAVIGATION.md'];
 await Promise.all(files.map(file=>access(file)));
 const html=await readFile('index.html','utf8'), app=await readFile('src/app.js','utf8');
 if(!html.includes('dir="rtl"')) throw new Error('RTL is missing');
 const screens=['דשבורד','עסקאות','קבלות','סופר ומוצרים','הוצאות קבועות','החזרים','מקורות מידע','דורש טיפול','המשימות שלי','תובנות','הגדרות'];
 for(const label of screens) if(!app.includes(label)) throw new Error(`Missing screen: ${label}`);
-console.log(`Build validation passed: ${files.length} core files, RTL and ${screens.length} screens.`);
+for(const label of ['בית','עסקאות','קבלות','המשימות שלי']) if(!app.includes(label)) throw new Error(`Missing primary navigation item: ${label}`);
+if(!app.includes("const primaryNav=")||!app.includes("const menuGroups=")) throw new Error('Navigation architecture is missing');
+console.log(`Build validation passed: ${files.length} core files, RTL, ${screens.length} screens and four primary destinations.`);
