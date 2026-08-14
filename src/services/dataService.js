@@ -3,6 +3,11 @@ import { importSources, expectedDocuments, importRuns, importIssues, reminderTas
 import { tasks, xpEvents, userScores, challenges, achievements, notificationRules, rewardConfig } from '../data/gamificationMockData.js';
 import { completeReceiptTask, completeTaskExactlyOnce } from './taskEngine.js';
 import { createSourceRecord, createCanonicalEvent } from './reconciliation.js';
+import { upsertClassificationRule, disableClassificationRule } from './classificationRules.js';
+
+const RULE_STORAGE_KEY='family-finance:classification-rules:v1';
+const loadRules=()=>{try{return JSON.parse(globalThis.localStorage?.getItem(RULE_STORAGE_KEY)||'[]')}catch{return []}};
+const persistRules=rules=>{try{globalThis.localStorage?.setItem(RULE_STORAGE_KEY,JSON.stringify(rules))}catch{/* In-memory fallback. */}};
 
 export class FinanceDataService {
   async getTransactions() { throw new Error('Not implemented'); }
@@ -11,10 +16,13 @@ export class FinanceDataService {
 }
 
 export class MockFinanceDataService extends FinanceDataService {
-  constructor() { super(); this.transactions = structuredClone(transactions); this.receipts = structuredClone(receipts); this.importSources=structuredClone(importSources); this.expectedDocuments=structuredClone(expectedDocuments); this.importRuns=structuredClone(importRuns); this.importIssues=structuredClone(importIssues); this.reminderTasks=structuredClone(reminderTasks);this.tasks=structuredClone(tasks);this.xpEvents=structuredClone(xpEvents);this.userScores=structuredClone(userScores);this.challenges=structuredClone(challenges);this.achievements=structuredClone(achievements);this.notificationRules=structuredClone(notificationRules);this.rewardConfig=structuredClone(rewardConfig);this.lastXPEvent=null;this.sourceRecords=[];this.canonicalEvents=[]; }
+  constructor() { super(); this.transactions = structuredClone(transactions); this.receipts = structuredClone(receipts); this.importSources=structuredClone(importSources); this.expectedDocuments=structuredClone(expectedDocuments); this.importRuns=structuredClone(importRuns); this.importIssues=structuredClone(importIssues); this.reminderTasks=structuredClone(reminderTasks);this.tasks=structuredClone(tasks);this.xpEvents=structuredClone(xpEvents);this.userScores=structuredClone(userScores);this.challenges=structuredClone(challenges);this.achievements=structuredClone(achievements);this.notificationRules=structuredClone(notificationRules);this.rewardConfig=structuredClone(rewardConfig);this.lastXPEvent=null;this.sourceRecords=[];this.canonicalEvents=[];this.classificationRules=loadRules();globalThis.__familyFinanceClassificationRules=this.classificationRules; }
   async getTransactions() { return structuredClone(this.transactions); }
   async getReceipts() { return structuredClone(this.receipts); }
   async getRecurring() { return structuredClone(recurring); }
+  async getClassificationRules() { return structuredClone(this.classificationRules); }
+  async saveClassificationRule(rule) { this.classificationRules=upsertClassificationRule(this.classificationRules,rule);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
+  async disableClassificationRule(id) { this.classificationRules=disableClassificationRule(this.classificationRules,id);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async getIngestionState() { return structuredClone({sources:this.importSources,expectedDocuments:this.expectedDocuments,importRuns:this.importRuns,issues:this.importIssues,reminders:this.reminderTasks}); }
   async getEngagementState() { return structuredClone({tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores,challenges:this.challenges,achievements:this.achievements,notificationRules:this.notificationRules,rewardConfig:this.rewardConfig,lastXPEvent:this.lastXPEvent}); }
   async completeUserTask(taskId) { const result=completeTaskExactlyOnce({taskId,tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores});this.tasks=result.tasks;this.xpEvents=result.xpEvents;this.userScores=result.userScores;this.lastXPEvent=result.xpEvent;return this.getEngagementState(); }

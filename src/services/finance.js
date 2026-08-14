@@ -19,15 +19,19 @@ export function findReceiptMatches(receipt, transactions) {
 export function calculateSummary(transactions) {
   const expenses=transactions.filter(t=>t.financialType==='expense').reduce((s,t)=>s+t.amount,0);
   const income=transactions.filter(t=>t.financialType==='income').reduce((s,t)=>s+t.amount,0);
+  const familySupport=transactions.filter(t=>t.financialType==='family_support').reduce((s,t)=>s+t.amount,0);
+  const gifts=transactions.filter(t=>t.financialType==='gift').reduce((s,t)=>s+t.amount,0);
   const reimbursements=transactions.filter(t=>['reimbursement','refund'].includes(t.financialType)).reduce((s,t)=>s+t.amount,0);
   const netExpenses=expenses-reimbursements;
   const savingsTransfers=sumAllocations(transactions,'savings');
   const investmentTransfers=sumAllocations(transactions,'investment');
   const otherCapitalAllocations=sumAllocations(transactions,'capital');
   const totalCapitalAllocation=savingsTransfers+investmentTransfers+otherCapitalAllocations;
-  const surplusBeforeAllocations=income-netExpenses;
+  const otherIncomingFunds=familySupport+gifts;
+  const cashInflows=income+otherIncomingFunds;
+  const surplusBeforeAllocations=cashInflows-netExpenses;
   const cashFlowAfterAllocations=surplusBeforeAllocations-totalCapitalAllocation;
-  return {expenses,income,reimbursements,netExpenses,savingsTransfers,investmentTransfers,otherCapitalAllocations,totalCapitalAllocation,surplusBeforeAllocations,cashFlowAfterAllocations,economicSurplus:surplusBeforeAllocations,currentAccountCashRemaining:cashFlowAfterAllocations,operatingSpendingRate:rate(netExpenses,income),savingsRate:rate(savingsTransfers,income),investmentRate:rate(investmentTransfers,income),capitalAllocationRate:rate(totalCapitalAllocation,income),balance:cashFlowAfterAllocations};
+  return {expenses,income,familySupport,gifts,otherIncomingFunds,cashInflows,reimbursements,netExpenses,savingsTransfers,investmentTransfers,otherCapitalAllocations,totalCapitalAllocation,surplusBeforeAllocations,cashFlowAfterAllocations,economicSurplus:surplusBeforeAllocations,currentAccountCashRemaining:cashFlowAfterAllocations,operatingSpendingRate:rate(netExpenses,cashInflows),savingsRate:rate(savingsTransfers,cashInflows),investmentRate:rate(investmentTransfers,cashInflows),capitalAllocationRate:rate(totalCapitalAllocation,cashInflows),balance:cashFlowAfterAllocations};
 }
 
 const allocationKind=record=>record.allocationType||(record.financialType==='savings_transfer'?'savings':record.financialType==='investment_transfer'?'investment':record.financialType==='capital_allocation'?'capital':null);

@@ -1,8 +1,8 @@
 export const rewardConfig={missing_receipt_completed:20,review_issue_resolved:10,expected_document_completed:15,receipt_before_reminder_bonus:5,weekly_receipt_streak:25};
 
 export const userScores=[
-  {userId:'demo-member-a',displayName:'משתמשת א׳',xp:145,level:3,activeStreak:6},
-  {userId:'demo-member-b',displayName:'משתמש ב׳',xp:120,level:3,activeStreak:4}
+  {userId:'demo-member-a',displayName:'רותם',xp:145,level:3,activeStreak:6},
+  {userId:'demo-member-b',displayName:'שמואל',xp:120,level:3,activeStreak:4}
 ];
 
 export const tasks=[

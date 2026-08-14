@@ -1,6 +1,6 @@
 /** Canonical models. Dates are ISO strings, currency defaults to ILS. */
 export const FinancialType = Object.freeze({
-  EXPENSE: 'expense', INCOME: 'income', REIMBURSEMENT: 'reimbursement', TRANSFER: 'transfer', REFUND: 'refund',
+  EXPENSE: 'expense', INCOME: 'income', FAMILY_SUPPORT: 'family_support', GIFT: 'gift', REIMBURSEMENT: 'reimbursement', TRANSFER: 'transfer', REFUND: 'refund',
   SAVINGS_TRANSFER: 'savings_transfer', INVESTMENT_TRANSFER: 'investment_transfer', CAPITAL_ALLOCATION: 'capital_allocation'
 });
 

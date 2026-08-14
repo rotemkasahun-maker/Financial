@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createClassificationRule, applySavedClassificationRules, upsertClassificationRule, disableClassificationRule } from '../src/services/classificationRules.js';
+import { normalizeRows } from '../src/services/fileImport.js';
+import { calculateSummary } from '../src/services/finance.js';
+import { renderFileImport } from '../src/views/fileImportView.js';
+import { MockFinanceDataService } from '../src/services/dataService.js';
+
+const rule=()=>createClassificationRule({id:'parents-monthly',target:'family_support',category:'עזרה מההורים',description:'תמיכה משפחתית מההורים',counterparty:'הורים',sourceType:'bank_import',direction:'incoming',typicalAmount:1500,amountTolerance:100,frequency:'monthly'});
+const rows=(description='תמיכה משפחתית מההורים',amount='1,500')=>[['תאריך','תיאור התנועה','זכות/חובה ₪'],['10/08/26',description,amount]];
+
+test('a confirmed rule is persisted by the data service for a later import session',async()=>{const service=new MockFinanceDataService();service.classificationRules=[];await service.saveClassificationRule(rule());const later=await service.getClassificationRules();assert.equal(later.length,1);assert.equal(normalizeRows(rows(),{filename:'demo.csv',classificationRules:later}).rows[0].financialType,'family_support')});
+test('recurring family support around 1500 is high-confidence and not salary',()=>{const result=normalizeRows(rows(),{filename:'demo.csv',classificationRules:[rule()]}).rows[0];assert.equal(result.reviewStatus,'not_required');assert.equal(result.category,'עזרה מההורים');assert.equal(result.classificationConfidence,'high')});
+test('amount alone never matches a materially different context',()=>{assert.equal(applySavedClassificationRules({description:'החזר מחנות',merchant:'החזר מחנות',sourceType:'bank_import',direction:'credit',amount:1500},[rule()]),null)});
+test('unknown 376.28 credit remains review',()=>{const result=normalizeRows(rows('זיכוי לא מוכר','376.28'),{filename:'demo.csv',classificationRules:[rule()]}).rows[0];assert.equal(result.financialType,'unknown');assert.equal(result.reviewStatus,'required')});
+test('user rule is applied before generic heuristics',()=>{const custom=createClassificationRule({target:'family_support',description:'משכורת תמיכה משפחתית',sourceType:'bank_import',direction:'incoming',typicalAmount:1500});const result=normalizeRows(rows('משכורת תמיכה משפחתית'),{filename:'demo.csv',classificationRules:[custom]}).rows[0];assert.equal(result.financialType,'family_support');assert.equal(result.classificationOrigin,'user_rule')});
+test('disabling a rule stops automatic classification',()=>{const disabled=disableClassificationRule([rule()],'parents-monthly');assert.equal(applySavedClassificationRules({description:'תמיכה משפחתית מההורים',merchant:'תמיכה משפחתית מההורים',sourceType:'bank_import',direction:'credit',amount:1500},disabled),null)});
+test('saving same rule updates instead of duplicating',()=>{const first=rule(),second={...rule(),id:'second',amountTolerance:150};const saved=upsertClassificationRule([first],second);assert.equal(saved.length,1);assert.equal(saved[0].id,'parents-monthly');assert.equal(saved[0].amountTolerance,150)});
+test('rule explanation is visible in import preview',()=>{const parsed=normalizeRows(rows(),{filename:'demo.csv',classificationRules:[rule()]});const preview={...parsed,dateRange:{from:'2026-08-10',to:'2026-08-10'},summary:{totalRows:1,totalDebits:0,totalCredits:1500},rows:parsed.rows.map(row=>({...row,importStatus:'ready'}))};const html=renderFileImport({fileImportPreview:preview,fileImportFilter:'all',ingestion:{importRuns:[]}},{header:()=>''});assert.match(html,/דפוס חודשי מוכר/)});
+test('family support increases cash flow without inflating employment income',()=>{const summary=calculateSummary([{financialType:'income',amount:10000,direction:'credit'},{financialType:'family_support',amount:1500,direction:'credit'},{financialType:'expense',amount:9000,direction:'debit'}]);assert.equal(summary.income,10000);assert.equal(summary.familySupport,1500);assert.equal(summary.surplusBeforeAllocations,2500)});

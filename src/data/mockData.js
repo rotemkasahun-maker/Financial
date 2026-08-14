@@ -8,7 +8,8 @@ export const transactions = [
   { id:'t7', date:'2026-08-04', merchant:'SACARA', description:'טיפוח', amount:129.90, currency:'ILS', direction:'debit', financialType:'expense', category:'איפור וטיפוח', source:'כרטיס אשראי', sourceType:'credit_card_import', sourceAccount:'כרטיס אישי •••• 1180' },
   { id:'t8', date:'2026-08-03', merchant:'מועדון הכדורגל', description:'אימון שמואל', amount:180, currency:'ILS', direction:'debit', financialType:'expense', category:'כדורגל שמואל', source:'הוראת קבע', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
   { id:'t9', date:'2026-08-01', merchant:'העברה לחיסכון', description:'עו״ש לחיסכון משפחתי', amount:1000, currency:'ILS', direction:'debit', financialType:'savings_transfer', allocationType:'savings', category:'חיסכון', source:'חשבון בנק', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
-  { id:'t10', date:'2026-08-01', merchant:'ויקטורי', description:'השלמות לסוף שבוע', amount:214.50, currency:'ILS', direction:'debit', financialType:'expense', category:'סופר', subcategory:'מזון', source:'קבלה', sourceType:'manual_upload', sourceAccount:'משתמשת א׳', receiptId:'r4' },
+  { id:'t10', date:'2026-08-01', merchant:'ויקטורי', description:'השלמות לסוף שבוע', amount:214.50, currency:'ILS', direction:'debit', financialType:'expense', category:'סופר', subcategory:'מזון', source:'קבלה', sourceType:'manual_upload', sourceAccount:'רותם', receiptId:'r4' },
+  { id:'t11', date:'2026-08-05', merchant:'תמיכה משפחתית', description:'דוגמה לעזרה חודשית מההורים', amount:1500, currency:'ILS', direction:'credit', financialType:'family_support', category:'עזרה מההורים', source:'חשבון בנק', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
 ];
 
 export const receipts = [
