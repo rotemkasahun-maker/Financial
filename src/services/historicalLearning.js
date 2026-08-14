@@ -1,4 +1,5 @@
 import { createClassificationRule } from './classificationRules.js';
+import { generateId } from '../utils/id.js';
 
 export const HistoricalConfidence=Object.freeze({HIGH:'high',MEDIUM:'medium',LOW:'low',CONFLICT:'conflict'});
 const normalize=value=>String(value??'').toLowerCase().replace(/[\u200e\u200f]/g,'').replace(/[׳״"'.,()_\-]/g,' ').replace(/\d{4,}/g,'#').replace(/\s+/g,' ').trim();
@@ -42,7 +43,7 @@ export function analyzeHistoricalRecords(records=[],options={}){
     const suffixes=[...new Set(group.rows.map(row=>String(row.cardSuffix||row.description||'').match(/(?:^|\D)(\d{4})(?:\D|$)/)?.[1]).filter(Boolean))],destinations=[...new Set(group.rows.map(row=>normalize(row.destinationAccount||row.destination||'')).filter(Boolean))];
     proposals.push({id:proposalId(group.key),ruleType:group.rows[0]._inferred.ruleType||'classification',pattern:group.description,sourceType:group.sourceType,sourceAccount:group.sourceAccount,direction:group.direction,target,category,confidence,evidenceCount:group.rows.length,dateRange:{from:dates[0]||null,to:dates.at(-1)||null},sourceFiles:[...new Set(group.rows.map(sourceName))],candidateClassifications:sorted.map(([key,occurrences])=>{const [candidateTarget,candidateCategory]=key.split('|');return {target:candidateTarget,category:candidateCategory,occurrences}}),typicalAmount,cardSuffix:suffixes.length===1?suffixes[0]:'',destinationPattern:destinations.length===1?destinations[0]:'',explicitUserEvidence:explicitCount,status:'proposed'});
   }
-  return {proposals:proposals.sort((a,b)=>({high:0,medium:1,conflict:2,low:3}[a.confidence]-{high:0,medium:1,conflict:2,low:3}[b.confidence])),ignored,summary:{total:proposals.length,high:proposals.filter(p=>p.confidence==='high').length,medium:proposals.filter(p=>p.confidence==='medium').length,conflicts:proposals.filter(p=>p.confidence==='conflict').length,low:proposals.filter(p=>p.confidence==='low').length,recordsAnalyzed:records.length},readOnly:true,affectsTotals:false,createsXP:false,sessionId:options.sessionId||crypto.randomUUID()};
+  return {proposals:proposals.sort((a,b)=>({high:0,medium:1,conflict:2,low:3}[a.confidence]-{high:0,medium:1,conflict:2,low:3}[b.confidence])),ignored,summary:{total:proposals.length,high:proposals.filter(p=>p.confidence==='high').length,medium:proposals.filter(p=>p.confidence==='medium').length,conflicts:proposals.filter(p=>p.confidence==='conflict').length,low:proposals.filter(p=>p.confidence==='low').length,recordsAnalyzed:records.length},readOnly:true,affectsTotals:false,createsXP:false,sessionId:options.sessionId||generateId('bootstrap')};
 }
 
 export function approveHistoricalProposal(proposal,overrides={}){

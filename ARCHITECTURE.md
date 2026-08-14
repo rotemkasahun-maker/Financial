@@ -55,4 +55,6 @@ The UI consumes `FinanceDataService`, not Sheets directly. `MockFinanceDataServi
 
 Historical files enter a read-only analysis boundary and never the live ledger. `historicalLearning.js` groups normalized evidence, honors explicit user classifications over heuristics, detects conflicts, and emits confidence-scored proposals. Only an explicit approval converts a proposal into the existing persistent `ClassificationRule` structure with `origin: historical_bootstrap`; reconciliation patterns use the same rule structure with `ruleType: reconciliation`.
 
+This is an internal, one-time setup utility, not an end-user destination. It has no navigation entry and is opened deliberately with `?setup=historical-learning`. Finishing bootstrap stores a local completion flag and disables the utility; the normal application only consumes the approved rules.
+
 The analysis API has no transaction, completeness, receipt-task, or XP write path. Raw files remain in browser memory for the analysis session and are not copied into the repository. Root-level CSV/XLSX files and private historical-data folders are ignored by Git.

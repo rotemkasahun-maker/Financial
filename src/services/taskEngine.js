@@ -1,3 +1,5 @@
+import { generateId } from '../utils/id.js';
+
 export const TaskStatus=Object.freeze({OPEN:'open',COMPLETED:'completed',SNOOZED:'snoozed',DISMISSED:'dismissed',NO_RECEIPT:'no_receipt_available'});
 
 export function inferTaskOwner(transaction){return transaction.userId||transaction.sourceMetadata?.userId||(transaction.sourceAccount?.includes('1180')?'demo-member-b':transaction.sourceAccount?'demo-member-a':null);}
@@ -9,13 +11,13 @@ export function ensureMissingReceiptTask(transaction,tasks,{now=new Date(),waiti
   if(existing)return {tasks,created:null};
   const ageHours=(now-new Date(transaction.importedAt||`${transaction.date}T00:00:00Z`))/3600000;
   if(ageHours<waitingPeriodHours)return {tasks,created:null};
-  const task={id:crypto.randomUUID(),dedupeKey:key,type:'missing_receipt',ownerId:inferTaskOwner(transaction),title:'חסרה קבלה',explanation:`${transaction.merchant} · ${transaction.amount} ₪`,relatedRecordType:'transaction',relatedRecordId:transaction.id,priority:'high',dueAt:now.toISOString(),status:TaskStatus.OPEN,xpReward:rewardXP,deepLink:{route:'receipt_capture',params:{transactionId:transaction.id}},notificationState:'first_due',notificationCount:0,createdAt:now.toISOString()};
+  const task={id:generateId('task'),dedupeKey:key,type:'missing_receipt',ownerId:inferTaskOwner(transaction),title:'חסרה קבלה',explanation:`${transaction.merchant} · ${transaction.amount} ₪`,relatedRecordType:'transaction',relatedRecordId:transaction.id,priority:'high',dueAt:now.toISOString(),status:TaskStatus.OPEN,xpReward:rewardXP,deepLink:{route:'receipt_capture',params:{transactionId:transaction.id}},notificationState:'first_due',notificationCount:0,createdAt:now.toISOString()};
   return {tasks:[...tasks,task],created:task};
 }
 
 export function ensureDeferredReviewTask(transaction,tasks,{now=new Date(),dueAt=null,rewardXP=10}={}){
   const key=`transaction_review:${transaction.id}`;const existing=tasks.find(task=>task.dedupeKey===key);if(existing)return {tasks,created:null};
-  const task={id:crypto.randomUUID(),dedupeKey:key,type:'transaction_review',ownerId:inferTaskOwner(transaction),title:'תעלומה קטנה מחכה לפיצוח',explanation:`${transaction.merchant||transaction.description} · ${transaction.amount} ₪`,relatedRecordType:'transaction',relatedRecordId:transaction.id,priority:'normal',dueAt:dueAt||null,status:TaskStatus.SNOOZED,xpReward:rewardXP,deepLink:{route:'transaction_review',params:{transactionId:transaction.id}},notificationState:dueAt?'snoozed':'tasks_only',notificationCount:0,createdAt:now.toISOString()};
+  const task={id:generateId('task'),dedupeKey:key,type:'transaction_review',ownerId:inferTaskOwner(transaction),title:'תעלומה קטנה מחכה לפיצוח',explanation:`${transaction.merchant||transaction.description} · ${transaction.amount} ₪`,relatedRecordType:'transaction',relatedRecordId:transaction.id,priority:'normal',dueAt:dueAt||null,status:TaskStatus.SNOOZED,xpReward:rewardXP,deepLink:{route:'transaction_review',params:{transactionId:transaction.id}},notificationState:dueAt?'snoozed':'tasks_only',notificationCount:0,createdAt:now.toISOString()};
   return {tasks:[...tasks,task],created:task};
 }
 
@@ -27,7 +29,7 @@ export function completeTaskExactlyOnce({taskId,tasks,xpEvents,userScores,now=ne
   const task=tasks.find(t=>t.id===taskId);if(!task||task.status===TaskStatus.COMPLETED)return {tasks,xpEvents,userScores,xpEvent:null};
   const updatedTasks=tasks.map(t=>t.id===taskId?{...t,status:TaskStatus.COMPLETED,completedAt:now.toISOString(),notificationState:'completed',xpAwarded:true}:t);
   const key=`task:${taskId}`;if(xpEvents.some(e=>e.dedupeKey===key))return {tasks:updatedTasks,xpEvents,userScores,xpEvent:null};
-  const xpEvent={id:crypto.randomUUID(),dedupeKey:key,userId:task.ownerId,taskId,amount:task.xpReward,reason:task.type==='missing_receipt'?'missing_receipt_completed':'task_completed',createdAt:now.toISOString()};
+  const xpEvent={id:generateId('xp'),dedupeKey:key,userId:task.ownerId,taskId,amount:task.xpReward,reason:task.type==='missing_receipt'?'missing_receipt_completed':'task_completed',createdAt:now.toISOString()};
   const updatedScores=userScores.map(s=>s.userId===task.ownerId?{...s,xp:s.xp+task.xpReward}:s);
   return {tasks:updatedTasks,xpEvents:[...xpEvents,xpEvent],userScores:updatedScores,xpEvent};
 }

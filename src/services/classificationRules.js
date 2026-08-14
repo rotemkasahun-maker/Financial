@@ -1,3 +1,5 @@
+import { generateId } from '../utils/id.js';
+
 const normalize=value=>String(value??'').toLowerCase().replace(/[\u200e\u200f]/g,'').replace(/[׳״"'.,()\-_]/g,' ').replace(/\s+/g,' ').trim();
 const tokens=value=>new Set(normalize(value).split(' ').filter(token=>token.length>1));
 const similarity=(left,right)=>{const a=tokens(left),b=tokens(right);if(!a.size||!b.size)return 0;const common=[...a].filter(token=>b.has(token)).length;return common/Math.max(a.size,b.size)};
@@ -5,7 +7,7 @@ const directionOf=row=>['credit','incoming'].includes(row.direction)?'incoming':
 
 export const RuleTarget=Object.freeze({FAMILY_SUPPORT:'family_support',GOVERNMENT_BENEFIT:'government_benefit',BANK_CREDIT:'bank_credit',INCOME:'income',REIMBURSEMENT:'reimbursement',GIFT:'gift',TRANSFER:'transfer',REFUND:'refund',EXPENSE:'expense',SAVINGS:'savings_transfer',INVESTMENT:'investment_transfer'});
 
-export function createClassificationRule({id=crypto.randomUUID(),householdId='demo-household',userId='demo-member-a',target,category,description='',counterparty='',sourceType='',sourceAccount='',direction,typicalAmount=null,amountTolerance=null,frequency='unknown',referencePattern='',enabled=true,ruleType='classification',origin='user_rule',confidence='high',evidenceCount=1,evidenceDateRange=null,userApproved=true,approvedAt=null,cardSuffix='',destinationPattern=''}={}){
+export function createClassificationRule({id=generateId('rule'),householdId='demo-household',userId='demo-member-a',target,category,description='',counterparty='',sourceType='',sourceAccount='',direction,typicalAmount=null,amountTolerance=null,frequency='unknown',referencePattern='',enabled=true,ruleType='classification',origin='user_rule',confidence='high',evidenceCount=1,evidenceDateRange=null,userApproved=true,approvedAt=null,cardSuffix='',destinationPattern=''}={}){
   const amount=typicalAmount===null?null:Math.abs(Number(typicalAmount));
   const now=new Date().toISOString();
   return {id,householdId,userId,target,category:category||categoryFor(target),descriptionPattern:normalize(description),counterpartyPattern:normalize(counterparty),sourceType,sourceAccount:normalize(sourceAccount),direction:direction||'unknown',typicalAmount:Number.isFinite(amount)?amount:null,amountTolerance:amountTolerance??(Number.isFinite(amount)?Math.max(50,amount*.08):null),frequency,referencePattern:normalize(referencePattern),cardSuffix:String(cardSuffix||'').replace(/\D/g,''),destinationPattern:normalize(destinationPattern),ruleType,enabled,origin,confidence,evidenceCount,evidenceDateRange,userApproved,approvedAt:approvedAt||(userApproved?now:null),createdAt:now,updatedAt:now};
