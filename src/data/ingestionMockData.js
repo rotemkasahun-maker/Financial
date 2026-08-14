@@ -1,10 +1,10 @@
 export const importSources = [
-  {id:'src-gmail-a',name:'Gmail — משתמשת א׳',type:'gmail',owner:'משתמשת א׳',method:'OAuth עתידי',mode:'automatic',status:'waiting_connection',lastSuccess:null,nextExpected:null,pendingIssues:0},
+  {id:'src-gmail-a',name:'Gmail — משתמשת א׳',type:'gmail',owner:'משתמשת א׳',method:'OAuth עתידי',mode:'automatic',status:'waiting_connection',lastAttempt:null,lastSuccess:null,nextSync:null,freshnessHours:24,consecutiveFailures:0,pendingIssues:0},
   {id:'src-gmail-b',name:'Gmail — משתמש ב׳',type:'gmail',owner:'משתמש ב׳',method:'OAuth עתידי',mode:'automatic',status:'waiting_connection',lastSuccess:null,nextExpected:null,pendingIssues:0},
   {id:'src-sms-a',name:'Android SMS — משתמשת א׳',type:'android_sms',owner:'משתמשת א׳',method:'סינון מקומי בטלפון',mode:'automatic',status:'waiting_connection',lastSuccess:null,nextExpected:null,pendingIssues:0},
   {id:'src-sms-b',name:'Android SMS — משתמש ב׳',type:'android_sms',owner:'משתמש ב׳',method:'סינון מקומי בטלפון',mode:'automatic',status:'waiting_connection',lastSuccess:null,nextExpected:null,pendingIssues:0},
-  {id:'src-bank',name:'חשבון בנק',type:'bank_import',owner:'משק הבית',method:'קובץ תנועות',mode:'semi_automatic',status:'up_to_date',lastSuccess:'2026-08-13T08:15:00Z',nextExpected:'2026-09-01',pendingIssues:0},
-  {id:'src-card',name:'כרטיס אשראי',type:'credit_card_import',owner:'משק הבית',method:'ייצוא חודשי',mode:'semi_automatic',status:'needs_attention',lastSuccess:'2026-08-10T07:30:00Z',nextExpected:'2026-08-15',pendingIssues:1},
+  {id:'src-bank',name:'חשבון בנק',type:'bank_import',owner:'משק הבית',method:'FileAdapter · OpenBankingAdapter מוכן',mode:'semi_automatic',status:'synced',lastAttempt:'2026-08-13T08:14:00Z',lastSuccess:'2026-08-13T08:15:00Z',nextSync:'2026-08-15T06:00:00Z',nextExpected:'2026-09-01',freshnessHours:48,consecutiveFailures:0,pendingIssues:0},
+  {id:'src-card',name:'כרטיס אשראי',type:'credit_card_import',owner:'משק הבית',method:'FileAdapter · OpenBankingAdapter מוכן',mode:'semi_automatic',status:'needs_attention',lastAttempt:'2026-08-10T07:29:00Z',lastSuccess:'2026-08-10T07:30:00Z',nextSync:'2026-08-15T06:00:00Z',nextExpected:'2026-08-15',freshnessHours:48,consecutiveFailures:1,pendingIssues:1},
   {id:'src-camera',name:'צילום והעלאת קבלות',type:'camera_capture',owner:'שני המשתמשים',method:'מצלמה / תמונה / PDF',mode:'semi_automatic',status:'connected',lastSuccess:'2026-08-12T16:42:00Z',nextExpected:null,pendingIssues:1},
   {id:'src-benefit',name:'מסמכים חודשיים',type:'recurring_document',owner:'משתמשת א׳',method:'העלאה ידנית עם תזכורת',mode:'manual_reminder',status:'missing_data',lastSuccess:'2026-07-09T10:00:00Z',nextExpected:'2026-08-10',pendingIssues:1}
 ];
@@ -24,7 +24,8 @@ export const importIssues = [
   {id:'issue-1',type:'suspected_duplicate',severity:'warning',title:'קבלה חשודה ככפילות',description:'רמי לוי · 487.30 ₪ · 12.08.2026',sourceId:'src-camera',status:'open',createdAt:'2026-08-12T16:42:00Z',action:'בדיקת התאמה'},
   {id:'issue-2',type:'missing_document',severity:'high',title:'מסמך חודשי חסר',description:'תלוש תגמולים — אוגוסט 2026',sourceId:'src-benefit',expectedDocumentId:'doc-benefit-2026-08',status:'open',createdAt:'2026-08-11T06:00:00Z',action:'העלי עכשיו'},
   {id:'issue-3',type:'import_failed',severity:'high',title:'שורה אחת לא נקלטה',description:'קובץ כרטיס האשראי מכיל תאריך לא תקין',sourceId:'src-card',status:'open',createdAt:'2026-08-10T07:30:00Z',action:'בדיקת הייבוא'},
-  {id:'issue-4',type:'uncategorized',severity:'warning',title:'עסקה ללא קטגוריה',description:'חיוב לא מזוהה · 74.90 ₪',sourceId:'src-card',status:'open',createdAt:'2026-08-10T07:30:00Z',action:'בחירת קטגוריה'}
+  {id:'issue-4',type:'uncategorized',severity:'warning',title:'עסקה ללא קטגוריה',description:'חיוב לא מזוהה · 74.90 ₪',sourceId:'src-card',status:'open',createdAt:'2026-08-10T07:30:00Z',action:'בחירת קטגוריה'},
+  {id:'issue-5',type:'stale_source',severity:'high',title:'מקור לא הסתנכרן לאחרונה',description:'Android SMS — משתמש ב׳ · אין heartbeat מהמכשיר',sourceId:'src-sms-b',status:'open',createdAt:'2026-08-14T06:00:00Z',action:'בדיקת המכשיר'}
 ];
 
 export const reminderTasks = [

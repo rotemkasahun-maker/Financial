@@ -1,6 +1,6 @@
 import { calculateCompleteness } from '../services/completeness.js';
 const modeLabels={automatic:'אוטומטי',semi_automatic:'חצי־אוטומטי',manual_reminder:'ידני עם תזכורת'};
-const statusLabels={connected:'מחובר',waiting_connection:'ממתין לחיבור',up_to_date:'עודכן',missing_data:'חסר מידע',needs_attention:'דורש טיפול',unavailable:'לא זמין לאוטומציה'};
+const statusLabels={active:'פעיל',connected:'מחובר',waiting_connection:'ממתין לחיבור',manual:'ידני',upload_required:'דורש העלאה',synced:'מסונכרן',up_to_date:'עודכן',missing_data:'חסר מידע',needs_attention:'דורש טיפול',failed:'נכשל',permission_expired:'הרשאה פגה',stale:'לא עודכן לאחרונה',unavailable:'לא זמין לאוטומציה'};
 
 export function renderDataSources(state,{header,date}) {
   const c=calculateCompleteness({month:'2026-08',sources:state.ingestion.sources,expectedDocuments:state.ingestion.expectedDocuments,issues:state.ingestion.issues});

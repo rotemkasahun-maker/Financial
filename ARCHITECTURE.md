@@ -36,6 +36,8 @@ The ingestion domain uses generic records rather than source-specific finance lo
 
 Sources are classified as `automatic`, `semi_automatic`, or `manual_reminder`. Uploading an expected document completes its reminder, resolves the related missing-document issue and refreshes its source state. Future Android notifications consume reminder tasks but are not implemented in the Web MVP.
 
+`AUTOMATION_MAP.md` is the durable source/process inventory and implementation roadmap. `sourceAdapters.js` keeps acquisition replaceable (`FileAdapter` or future `OpenBankingAdapter`) while the shared pipeline retains all financial policy. Source health must prove a recent successful sync before “no transactions” can be considered valid data.
+
 ## Android and privacy
 
 Each phone scans only its own SMS after explicit Android permission in a future phase. Filtering should happen on-device so unrelated conversations are not uploaded. Only likely receipts, invoice links, payment confirmations, and structured financial fields enter the shared pipeline. Gmail connections use independent OAuth grants for each household member. No SMS permissions, Gmail connections, or external credentials exist in this MVP.
