@@ -31,3 +31,8 @@ test('malformed rows remain visible and are not importable',()=>{
   assert.equal(preview.rows[0].valid,false);
   assert.equal(preview.summary.malformed,1);
 });
+
+test('explicit bank transfers to savings and investments are not proposed as expenses',()=>{
+  const parsed=normalizeRows([['תאריך','תיאור','חובה','זכות'],['15.08.2026','העברה לחיסכון משפחתי','1,500',''],['16.08.2026','העברה לחשבון השקעות','800','']],{filename:'bank.csv'});
+  assert.deepEqual(parsed.rows.map(row=>[row.financialType,row.allocationType,row.category]),[['savings_transfer','savings','חיסכון'],['investment_transfer','investment','השקעות']]);
+});

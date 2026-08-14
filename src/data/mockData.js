@@ -7,7 +7,7 @@ export const transactions = [
   { id:'t6', date:'2026-08-07', merchant:'החזר מבעלת הדירה', description:'החזר עבור ברז', amount:620, currency:'ILS', direction:'credit', financialType:'reimbursement', category:'בית', linkedTransactionId:'t5', source:'העברה', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי', reimbursementStatus:'linked' },
   { id:'t7', date:'2026-08-04', merchant:'SACARA', description:'טיפוח', amount:129.90, currency:'ILS', direction:'debit', financialType:'expense', category:'איפור וטיפוח', source:'כרטיס אשראי', sourceType:'credit_card_import', sourceAccount:'כרטיס אישי •••• 1180' },
   { id:'t8', date:'2026-08-03', merchant:'מועדון הכדורגל', description:'אימון שמואל', amount:180, currency:'ILS', direction:'debit', financialType:'expense', category:'כדורגל שמואל', source:'הוראת קבע', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
-  { id:'t9', date:'2026-08-01', merchant:'העברה בין חשבונות', description:'עו״ש לחיסכון', amount:1000, currency:'ILS', direction:'debit', financialType:'transfer', category:'העברה', source:'חשבון בנק', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
+  { id:'t9', date:'2026-08-01', merchant:'העברה לחיסכון', description:'עו״ש לחיסכון משפחתי', amount:1000, currency:'ILS', direction:'debit', financialType:'savings_transfer', allocationType:'savings', category:'חיסכון', source:'חשבון בנק', sourceType:'bank_import', sourceAccount:'עו״ש משפחתי' },
   { id:'t10', date:'2026-08-01', merchant:'ויקטורי', description:'השלמות לסוף שבוע', amount:214.50, currency:'ILS', direction:'debit', financialType:'expense', category:'סופר', subcategory:'מזון', source:'קבלה', sourceType:'manual_upload', sourceAccount:'משתמשת א׳', receiptId:'r4' },
 ];
 
@@ -19,6 +19,8 @@ export const receipts = [
 ];
 
 export const recurring = [
+  {id:'rec-save',name:'חיסכון חודשי',amount:1500,next:'2026-08-20',status:'active',financialType:'savings_transfer',allocationType:'savings',change:0},
+  {id:'rec-invest',name:'השקעה חודשית',amount:800,next:'2026-08-22',status:'active',financialType:'investment_transfer',allocationType:'investment',change:0},
   {name:'משכנתה', amount:4850, next:'2026-09-02', status:'active', change:0},
   {name:'אינטרנט', amount:119.90, next:'2026-09-05', status:'active', change:0},
   {name:'מועדון הכדורגל', amount:180, next:'2026-09-03', status:'active', change:12},

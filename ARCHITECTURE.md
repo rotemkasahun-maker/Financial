@@ -40,6 +40,10 @@ Sources are classified as `automatic`, `semi_automatic`, or `manual_reminder`. U
 
 Bit and PayBox use dedicated supported-only adapter boundaries. `SourceRecord` preserves every provider/bank/card/SMS representation for audit, while one `CanonicalFinancialEvent` controls totals. Reconciliation links source records instead of deleting them. Wallet funding and withdrawals between household-owned sources are transfers; incoming wallet money remains unclassified until reimbursement/repayment/gift/transfer/income rules establish its meaning.
 
+## Cash flow and capital allocation
+
+Operating expenses and intentional capital allocations are separate dimensions. `savings_transfer`, `investment_transfer`, and `capital_allocation` have zero household-expense impact, but an outgoing allocation reduces current-account cash availability. Monthly reporting therefore exposes both economic surplus before allocations and cash flow after allocations. Recurring allocations are reserved in the month-end forecast until linked to a posted transaction. A future goal contribution (for example, Madrid) may reference the same canonical savings event; it must not create a second expense or allocation.
+
 ## Android and privacy
 
 Each phone scans only its own SMS after explicit Android permission in a future phase. Filtering should happen on-device so unrelated conversations are not uploaded. Only likely receipts, invoice links, payment confirmations, and structured financial fields enter the shared pipeline. Gmail connections use independent OAuth grants for each household member. No SMS permissions, Gmail connections, or external credentials exist in this MVP.

@@ -9,3 +9,5 @@ export const householdRules=[
   {pattern:/כדורגל.*שמואל|שמואל.*כדורגל/i,category:'כדורגל שמואל',origin:DecisionOrigin.HOUSEHOLD_RULE}
 ];
 export function classifyWithRules(record){const text=`${record.merchant||''} ${record.description||''}`;const rule=householdRules.find(r=>r.pattern.test(text));return rule?{category:rule.category,origin:rule.origin,confidence:1,reimbursementExpected:Boolean(rule.reimbursementExpected)}:null;}
+
+export function classifyCapitalAllocation(record){if(!['debit','outgoing'].includes(record.direction))return null;const text=`${record.merchant||''} ${record.description||''}`;if(/העבר.*חיסכון|חיסכון משפחתי|תכנית חיסכון|פיקדון/i.test(text))return {financialType:'savings_transfer',allocationType:'savings',category:'חיסכון',origin:DecisionOrigin.HOUSEHOLD_RULE,confidence:.98,countInExpenseTotals:false};if(/העבר.*השקע|חשבון השקעות|תיק ניירות|קרן השתלמות/i.test(text))return {financialType:'investment_transfer',allocationType:'investment',category:'השקעות',origin:DecisionOrigin.HOUSEHOLD_RULE,confidence:.98,countInExpenseTotals:false};return null;}
