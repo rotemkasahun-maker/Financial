@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, filterPreviewRows, applyReviewDecision, normalizeDate, parseAmount } from '../src/services/fileImport.js';
+import { renderFileImport } from '../src/views/fileImportView.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
   const csv='דוח תנועות לחשבון\nתאריך,תיאור,חובה,זכות,אסמכתא\n12.08.2026,רמי לוי,"487.30",,abc-1\n13.08.2026,החזר מחבר,,100,abc-2';
@@ -102,4 +103,61 @@ test('trailing empty fields are removed without collapsing internal blank fields
   assert.deepEqual(trimTrailingEmptyFields(['a','','c','','']),['a','','c']);
   const rows=parseCsv('h1,h2,h3\n"value",,"last",');
   assert.deepEqual(rows[1],['value','','last']);
+});
+
+test('bank fee is imported as an expense in the bank fees category',()=>{
+  const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪','אסמכתה'],['12/08/26','עמלת פעולה בערוץ ישיר','-2.50','FEE-1']],{filename:'bank.csv'});
+  assert.equal(parsed.rows[0].valid,true);
+  assert.equal(parsed.rows[0].financialType,'expense');
+  assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
+  assert.equal(parsed.rows[0].description,'עמלת פעולה בערוץ ישיר');
+  assert.equal(parsed.rows[0].reference,'FEE-1');
+  assert.equal(parsed.rows[0].reviewStatus,'not_required');
+});
+
+test('fee metadata and a dedicated fee row do not create a duplicate fee event',()=>{
+  const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪','עמלה'],['12/08/26','העברה לדוגמה','-100','2.50'],['12/08/26','עמלת בנק','-2.50','2.50']],{filename:'bank.csv'});
+  const preview=buildImportPreview(parsed);
+  assert.equal(preview.rows.length,2);
+  assert.equal(preview.rows[0].feeRepresentation,'metadata_only');
+  assert.equal(preview.rows[1].feeRepresentation,'dedicated_row');
+  assert.equal(preview.summary.totalDebits,102.5);
+});
+
+test('a fee-only column can represent a dedicated fee row',()=>{
+  const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪','עמלה'],['12/08/26','דמי ניהול','','7.25']],{filename:'bank.csv'});
+  assert.equal(parsed.rows[0].valid,true);
+  assert.equal(parsed.rows[0].amount,7.25);
+  assert.equal(parsed.rows[0].feeRepresentation,'fee_column_row');
+  assert.equal(parsed.rows[0].category,'עמלות בנק ופיננסים');
+});
+
+test('review filters return only actionable rows and preserve technical failures separately',()=>{
+  const parsed=normalizeRows([['תאריך','תיאור התנועה','זכות/חובה ₪'],['12/08/26','העברה שהתקבלה','500'],['13/08/26','זיכוי אחר','120'],['14/08/26','עסקה רגילה','-80'],['תאריך שגוי','שורה שבורה',''],['15/08/26','עמלת בנק','-3']],{filename:'bank.csv'});
+  const preview=buildImportPreview(parsed);
+  assert.equal(filterPreviewRows(preview.rows,'review').length,2);
+  assert.ok(filterPreviewRows(preview.rows,'review').every(row=>row.reviewStatus==='required'&&row.reviewReason));
+  assert.equal(filterPreviewRows(preview.rows,'failed').length,1);
+  assert.equal(filterPreviewRows(preview.rows,'failed')[0].parseFailureReason,'לא זוהה תאריך');
+  assert.equal(preview.summary.requiresReview,2);
+  assert.equal(preview.summary.malformed,1);
+});
+
+test('review decision is retained in preview state',()=>{
+  const row={valid:true,financialType:'unknown',reviewStatus:'required',reviewReason:'זיכוי לא מסווג',excluded:false};
+  const resolved=applyReviewDecision(row,'reimbursement');
+  assert.equal(resolved.reviewStatus,'resolved');
+  assert.equal(resolved.reviewDecision,'reimbursement');
+  assert.equal(resolved.financialType,'reimbursement');
+  assert.equal(applyReviewDecision(row,'ignore').excluded,true);
+});
+
+test('review reason and action are visible while review filter hides other rows',()=>{
+  const rows=[{valid:true,date:'2026-08-12',description:'העברה שהתקבלה',amount:500,direction:'credit',financialType:'unknown',category:null,reference:'',excluded:false,importStatus:'ready',reviewStatus:'required',reviewReason:'העברה פנימית אפשרית'},{valid:true,date:'2026-08-13',description:'עמלת בנק',amount:3,direction:'debit',financialType:'expense',category:'עמלות בנק ופיננסים',reference:'',excluded:false,importStatus:'ready',reviewStatus:'not_required'}];
+  const state={fileImportFilter:'review',fileImportPreview:{filename:'demo.csv',selectedSource:'bank_import',dateRange:{from:'2026-08-12',to:'2026-08-13'},rows,summary:{totalRows:2,totalDebits:3,totalCredits:500}},ingestion:{importRuns:[]}};
+  const html=renderFileImport(state,{header:()=>''});
+  assert.match(html,/העברה פנימית אפשרית/);
+  assert.match(html,/data-review-row="0"/);
+  assert.doesNotMatch(html,/עמלת בנק/);
+  assert.match(html,/חזרה לכל השורות/);
 });
