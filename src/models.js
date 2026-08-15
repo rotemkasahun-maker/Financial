@@ -13,9 +13,9 @@ export const createReceipt = (data) => ({
   sourceType: 'manual_upload', sourceAccount: null, externalSourceId: null, importedAt: new Date().toISOString(), ...data
 });
 
-export const createImportEnvelope = ({ sourceType, payload, userId, deviceId, sourceAccount=null, externalSourceId=null }) => ({
+export const createImportEnvelope = ({ sourceType, payload, userId, deviceId, sourceAccount=null, externalSourceId=null, metadata=null }) => ({
   id: generateId('import'), householdId:'demo-household', userId, deviceId, sourceType,
-  sourceAccount, externalSourceId, importedAt:new Date().toISOString(), status:'received', payload
+  sourceAccount, externalSourceId, metadata, importedAt:new Date().toISOString(), status:'received', payload
 });
 
 export const createExpectedDocument = data => ({id:generateId('document'),documentType:'',frequency:'monthly',period:'',expectedDate:'',owner:'',received:false,fileId:null,extractedData:null,reminderState:'upcoming',...data});
