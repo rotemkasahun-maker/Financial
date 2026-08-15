@@ -68,7 +68,8 @@ async function handleFinancialFileSelection(event){
   const file=event.target.files?.[0]||null;state.fileImportPreview=null;state.fileImportParsed=null;state.fileImportError=null;state.fileImportSelection=file?{name:file.name||'קובץ ללא שם',type:file.type||'',size:Number(file.size||0),status:'reading'}:null;render();
   try{
     const parseXlsx=async selected=>{const response=await fetch('/api/parse-xlsx',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:selected});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'XLSX parsing failed');return payload.rows};
-    const result=await createValidatedImportPreview(file,{parseXlsx,existingTransactions:state.transactions,existingReceipts:state.receipts,classificationRules:state.classificationRules});
+    const importContext=await dataService.getImportPreparationContext();
+    const result=await createValidatedImportPreview(file,{parseXlsx,...importContext});
     state.fileImportSelection={name:result.selected.filename,type:result.selected.type,size:result.selected.size,status:'ready',encoding:result.selected.encoding};state.fileImportParsed=result.parsed;state.fileImportPreview=result.preview;render();
   }catch(error){console.warn('[import diagnostic]',{stage:'failed',code:error.code||'unexpected_error',message:error.message,fileExists:Boolean(file),filename:file?.name||null,type:file?.type||null,size:Number(file?.size||0)});state.fileImportPreview=null;state.fileImportParsed=null;state.fileImportError=error.message||'לא הצלחנו לקרוא את הקובץ';if(state.fileImportSelection)state.fileImportSelection.status='failed';render()}
 }

@@ -43,5 +43,6 @@ historical-data/
 private-data/
 historical-receipts/
 private-receipts/
+local-snapshots/
 /*.csv
 /*.xlsx

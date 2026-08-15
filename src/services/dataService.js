@@ -9,6 +9,8 @@ import { analyzeHistoricalRecords, approveHistoricalProposal, bulkApproveSafeHis
 import { generateId } from '../utils/id.js';
 import { completeMadridChallengeExactlyOnce } from './madridGoal.js';
 import { persistableReceiptKnowledge } from './historicalReceiptLearning.js';
+import { buildImportPreview, isHighConfidenceResolved, rowRequiresReview } from './fileImport.js';
+import { createLocalSnapshot, listLocalSnapshots, loadLocalSnapshot } from './localSnapshot.js';
 
 const RULE_STORAGE_KEY='family-finance:classification-rules:v1';
 let memoryRuleStore=[];
@@ -20,6 +22,10 @@ const loadReceiptKnowledge=()=>{try{const stored=globalThis.localStorage?.getIte
 const persistReceiptKnowledge=knowledge=>{memoryReceiptKnowledge=structuredClone(knowledge);try{globalThis.localStorage?.setItem(RECEIPT_KNOWLEDGE_STORAGE_KEY,JSON.stringify(knowledge))}catch{/* In-memory fallback. */}};
 const hasTotalsImpact=financialType=>!['unknown','transfer','savings_transfer','investment_transfer','capital_allocation','credit_card_settlement'].includes(financialType);
 const applyHighConfidenceRulesToReviewState=service=>{service.transactions=service.transactions.map(transaction=>{if(!['required','deferred'].includes(transaction.reviewStatus))return transaction;const matched=applySavedClassificationRules(transaction,service.classificationRules);if(matched?.confidence!=='high')return transaction;service.tasks=closeDeferredReviewTask(transaction.id,service.tasks);return {...transaction,financialType:matched.financialType,category:matched.category,reviewStatus:'resolved_automatically',reviewReason:null,classificationConfidence:'high',classificationExplanation:matched.explanation,countInTotals:hasTotalsImpact(matched.financialType)}})};
+const SNAPSHOT_FIELDS=['transactions','receipts','importSources','expectedDocuments','importRuns','importIssues','reminderTasks','tasks','xpEvents','userScores','challenges','madridGoal','achievements','notificationRules','rewardConfig','sourceRecords','canonicalEvents','classificationRules','receiptKnowledge'];
+const snapshotData=service=>Object.fromEntries(SNAPSHOT_FIELDS.map(field=>[field,structuredClone(service[field])]));
+const restoreSnapshotData=(service,data)=>{for(const field of SNAPSHOT_FIELDS)if(Object.hasOwn(data,field))service[field]=structuredClone(data[field]);globalThis.__familyFinanceClassificationRules=service.classificationRules;persistRules(service.classificationRules);persistReceiptKnowledge(service.receiptKnowledge)};
+const prepareImportForApproval=(service,preview)=>{const checked=buildImportPreview(preview,{existingTransactions:service.transactions,existingReceipts:service.receipts});const selected=checked.rows.filter(row=>!row.excluded&&row.importStatus==='ready');if(!checked.filename||checked.selectedSource==='unknown_financial_export')throw new Error('Import source is not ready');if(!selected.length)throw new Error('No new transactions to import');if(checked.rows.some(row=>!row.excluded&&(!row.valid||row.blocksImport||row.reviewSeverity==='critical')))throw new Error('Critical import integrity issue');if(selected.some(row=>rowRequiresReview(row)&&row.reviewStatus!=='deferred'))throw new Error('Unresolved import review item');if(selected.some(row=>!isHighConfidenceResolved(row)&&!['resolved','deferred'].includes(row.reviewStatus)))throw new Error('Automatic import requires high confidence');return checked};
 
 export class FinanceDataService {
   async getTransactions() { throw new Error('Not implemented'); }
@@ -33,6 +39,10 @@ export class MockFinanceDataService extends FinanceDataService {
   async getReceipts() { return structuredClone(this.receipts); }
   async getRecurring() { return structuredClone(recurring); }
   async getClassificationRules() { return structuredClone(this.classificationRules); }
+  async getImportPreparationContext() { return structuredClone({classificationRules:this.classificationRules,existingTransactions:this.transactions,existingReceipts:this.receipts,reconciliationEvidence:{sourceRecords:this.sourceRecords,receipts:this.receipts,cardTransactions:this.transactions.filter(item=>item.sourceType==='credit_card_import')}}); }
+  async createLocalSnapshot(reason='manual') { return createLocalSnapshot(snapshotData(this),{reason}); }
+  async getLocalSnapshots() { return listLocalSnapshots(); }
+  async restoreLocalSnapshot(id) { const snapshot=loadLocalSnapshot(id);restoreSnapshotData(this,snapshot.data);return structuredClone({snapshot:{id:snapshot.id,createdAt:snapshot.createdAt,reason:snapshot.reason},transactions:this.transactions,receipts:this.receipts,ingestion:await this.getIngestionState()}); }
   async hydrateClassificationRules(rules=[]) { this.classificationRules=mergeHydratedClassificationRules(this.classificationRules,rules);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);applyHighConfidenceRulesToReviewState(this);return this.getClassificationRules(); }
   async saveClassificationRule(rule) { this.classificationRules=upsertClassificationRule(this.classificationRules,rule);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async disableClassificationRule(id) { this.classificationRules=disableClassificationRule(this.classificationRules,id);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
@@ -62,14 +72,15 @@ export class MockFinanceDataService extends FinanceDataService {
 
 const approveFileImportBase=MockFinanceDataService.prototype.approveFileImport;
 MockFinanceDataService.prototype.approveFileImport=async function(preview,userId='demo-member-a'){
-  const result=await approveFileImportBase.call(this,preview,userId);
-  for(const row of preview.rows.filter(item=>item.financialType==='credit_card_settlement')){const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant),event=this.canonicalEvents.find(item=>item.id===transaction?.canonicalEventId);if(transaction)Object.assign(transaction,{countInTotals:false,settlementOfSourceRecordIds:row.reconciliationMatchIds||[],classificationExplanation:row.classificationExplanation});if(event)Object.assign(event,{countInTotals:false,relationship:'credit_card_settlement',settlementOfSourceRecordIds:row.reconciliationMatchIds||[]})}
-  for(const row of preview.rows.filter(item=>item.valid&&!item.excluded&&item.reviewStatus==='deferred')){
+  const checkedPreview=prepareImportForApproval(this,preview),snapshot=await this.createLocalSnapshot(`before_import:${preview.filename}`);let result;
+  try{result=await approveFileImportBase.call(this,checkedPreview,userId)}catch(error){await this.restoreLocalSnapshot(snapshot.id);throw error}
+  for(const row of checkedPreview.rows.filter(item=>item.financialType==='credit_card_settlement')){const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant),event=this.canonicalEvents.find(item=>item.id===transaction?.canonicalEventId);if(transaction)Object.assign(transaction,{countInTotals:false,settlementOfSourceRecordIds:row.reconciliationMatchIds||[],classificationExplanation:row.classificationExplanation});if(event)Object.assign(event,{countInTotals:false,relationship:'credit_card_settlement',settlementOfSourceRecordIds:row.reconciliationMatchIds||[]})}
+  for(const row of checkedPreview.rows.filter(item=>item.valid&&!item.excluded&&item.reviewStatus==='deferred')){
     const transaction=this.transactions.find(item=>item.date===row.date&&item.amount===row.amount&&item.merchant===row.merchant);
     if(!transaction)continue;Object.assign(transaction,{reviewStatus:'deferred',reviewReason:'לבדיקה מאוחר יותר',countInTotals:false});
     const ensured=ensureDeferredReviewTask(transaction,this.tasks,{dueAt:row.deferUntil||null});this.tasks=ensured.tasks;
   }
-  result.transactions=structuredClone(this.transactions);result.canonicalEvents=structuredClone(this.canonicalEvents);result.sourceRecords=structuredClone(this.sourceRecords);result.engagement=await this.getEngagementState();return result;
+  result.transactions=structuredClone(this.transactions);result.canonicalEvents=structuredClone(this.canonicalEvents);result.sourceRecords=structuredClone(this.sourceRecords);result.engagement=await this.getEngagementState();result.snapshot=snapshot;return result;
 };
 
 const saveClassificationRuleBase=MockFinanceDataService.prototype.saveClassificationRule;

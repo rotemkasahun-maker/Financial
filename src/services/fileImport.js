@@ -84,10 +84,12 @@ export function applyReviewDecision(row,decision,{deferUntil=null}={}){const map
 
 export function buildImportPreview(parsed,{existingTransactions=[],existingReceipts=[]}={}){
   const seen=new Set(existingTransactions.map(transaction=>`${transaction.date}|${transaction.amount}|${clean(transaction.merchant)}|${transaction.externalSourceId||''}`));
+  const previewExternalIds=new Set(),previewFingerprints=new Set();
   const rows=parsed.rows.map(row=>{
     if(!row.valid)return {...row,blocksImport:true,reviewSeverity:'critical'};
-    const exact=seen.has(`${row.date}|${row.amount}|${clean(row.merchant)}|${row.externalSourceId||''}`)||Boolean(row.externalSourceId&&existingTransactions.some(transaction=>transaction.externalSourceId===row.externalSourceId));
-    const possibleDuplicate=!exact&&existingTransactions.find(transaction=>Math.abs(transaction.amount-row.amount)<.01&&daysApart(transaction.date,row.date)<=2&&clean(transaction.merchant)===clean(row.merchant));
+    const fingerprint=`${row.date}|${row.amount}|${clean(row.merchant)}`,duplicateExternalId=Boolean(row.externalSourceId&&previewExternalIds.has(row.externalSourceId)),duplicateInFile=previewFingerprints.has(fingerprint),exact=duplicateExternalId||seen.has(`${fingerprint}|${row.externalSourceId||''}`)||Boolean(row.externalSourceId&&existingTransactions.some(transaction=>transaction.externalSourceId===row.externalSourceId));
+    const possibleDuplicate=!exact&&(duplicateInFile||existingTransactions.find(transaction=>Math.abs(transaction.amount-row.amount)<.01&&daysApart(transaction.date,row.date)<=2&&clean(transaction.merchant)===clean(row.merchant)));
+    if(row.externalSourceId)previewExternalIds.add(row.externalSourceId);previewFingerprints.add(fingerprint);
     const receipt=existingReceipts.find(item=>Math.abs(item.total-row.amount)<.01&&item.purchaseDate===row.date);
     return finalizeReviewState({...row,duplicateStatus:exact?'existing':possibleDuplicate?'possible':'new',importStatus:exact?'existing':'ready',matchingReceiptId:receipt?.id||null,possibleMatch:possibleDuplicate?.id||null,reviewStatus:possibleDuplicate?'required':row.reviewStatus,reviewReason:possibleDuplicate?'כפילות אפשרית':row.reviewReason,reviewSeverity:possibleDuplicate?'critical':row.reviewSeverity,blocksImport:Boolean(possibleDuplicate)});
   });
