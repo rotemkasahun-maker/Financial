@@ -6,15 +6,19 @@ const similarity=(left,right)=>{const a=tokens(left),b=tokens(right);if(!a.size|
 const daysApart=(left,right)=>Math.abs((new Date(left)-new Date(right))/86400000);
 const money=value=>{const cleaned=String(value??'').replace(/[₪\s]/g,'').replace(/,/g,'');const number=Number(cleaned);return Number.isFinite(number)?Math.abs(number):null};
 const isoDate=value=>{const text=String(value??'').trim(),match=text.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);if(!match)return /^\d{4}-\d{2}-\d{2}/.test(text)?text.slice(0,10):null;const year=match[3].length===2?`20${match[3]}`:match[3];return `${year}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`};
+const decodeHtml=value=>String(value??'').replace(/&#(x?[0-9a-f]+);/gi,(_,code)=>String.fromCodePoint(parseInt(code.replace(/^x/i,''),/^x/i.test(code)?16:10))).replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"');
+const filenameMerchant=filename=>{const rawStem=decodeURIComponent(String(filename??'')).replace(/\.(?:mht|mhtml|pdf)$/i,'').trim(),domain=rawStem.match(/(?:^|[_.\s])(?:www\.|digi\.)?([a-z0-9-]+)\.(?:co\.)?il(?=$|[^a-z0-9])/i);if(domain)return domain[1].replace(/-/g,' ');const stem=rawStem.replace(/[_-]+/g,' ').trim();if(/^קבלה(?:\s|$)/i.test(stem))return null;return stem.replace(/\breceipt\b/ig,'').trim()||null};
+const uniqueDate=(...values)=>{const found=[...new Set(values.flatMap(value=>[...String(value??'').replace(/_/g,'-').matchAll(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g)].map(match=>isoDate(match[0]))).filter(Boolean))];return found.length===1?found[0]:null};
 
 export function parseMhtReceipt(text,{filename='receipt.mht'}={}){
-  const source=String(text??''),mimeParts=source.split(/\r?\n--[^\r\n]+/),decodedParts=mimeParts.map(part=>{if(/Content-Transfer-Encoding:\s*base64/i.test(part)){const body=part.split(/\r?\n\r?\n/).slice(1).join('\n').replace(/\s+/g,'');try{if(typeof globalThis.atob==='function')return decodeURIComponent([...globalThis.atob(body)].map(char=>`%${char.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''))}catch{return ''}}return part.replace(/=\r?\n/g,'').replace(/=([0-9A-F]{2})/gi,(_,hex)=>String.fromCharCode(parseInt(hex,16)))}),decoded=decodedParts.join(' ').replace(/<[^>]+>/g,' '),plain=decoded.replace(/\s+/g,' ');
+  const source=String(text??''),mimeParts=source.split(/\r?\n--[^\r\n]+/),decodedParts=mimeParts.map(part=>{if(/Content-Transfer-Encoding:\s*base64/i.test(part)){const body=part.split(/\r?\n\r?\n/).slice(1).join('\n').replace(/\s+/g,'');try{if(typeof globalThis.atob==='function')return decodeURIComponent([...globalThis.atob(body)].map(char=>`%${char.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''))}catch{return ''}}return part.replace(/=\r?\n/g,'').replace(/=([0-9A-F]{2})/gi,(_,hex)=>String.fromCharCode(parseInt(hex,16)))}),decoded=decodeHtml(decodedParts.join(' ')).replace(/<[^>]+>/g,' '),plain=decoded.replace(/\s+/g,' ');
   const merchant=(plain.match(/(?:merchant|בית עסק|ספק)\s*[:：-]\s*([^|;]{2,80})/i)||[])[1]?.trim()||null;
-  const date=isoDate((plain.match(/(?:date|תאריך)\s*[:：-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)||[])[1]);
-  const total=money((plain.match(/(?:total|סה.?כ|לתשלום)\s*[:：-]?\s*(?:₪|ש.?ח)?\s*([\d,.]+)/i)||[])[1]);
+  const date=isoDate((plain.match(/(?:date|תאריך)\s*[:：-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)||[])[1])||uniqueDate(plain,filename);
+  const total=money((plain.match(/(?:total|סה.?כ|סך\s*הכל|לתשלום|סכום\s*כולל)[^\d]{0,40}([\d,.]+)/i)||[])[1]);
   const reference=(plain.match(/(?:order|reference|הזמנה|אסמכתה)\s*(?:number|מספר|#)?\s*[:：-]?\s*([\w-]{3,})/i)||[])[1]||null;
   const items=[...plain.matchAll(/(?:item|פריט)\s*[:：-]\s*([^|;]+?)\s+(?:₪|ש.?ח)\s*([\d,.]+)/gi)].map(match=>({name:match[1].trim(),total:money(match[2])}));
-  return {filename,fileType:'mht',merchant,date,total,reference,items,valid:Boolean(merchant&&date&&total),parseStatus:merchant&&date&&total?'parsed':'unresolved'};
+  const resolvedMerchant=merchant||filenameMerchant(filename);
+  return {filename,fileType:'mht',merchant:resolvedMerchant,date,total,reference,items,valid:Boolean(resolvedMerchant&&date&&total),parseStatus:resolvedMerchant&&date&&total?'parsed':'unresolved'};
 }
 
 export function persistableReceiptKnowledge(result){
@@ -23,7 +27,7 @@ export function persistableReceiptKnowledge(result){
 }
 
 export function parsePdfReceiptText(text,{filename='receipt.pdf'}={}){
-  const plain=String(text??'').replace(/\s+/g,' '),merchant=(plain.match(/(?:merchant|בית עסק|ספק)\s*[:：-]\s*([^|;]{2,80})/i)||[])[1]?.trim()||null,date=isoDate((plain.match(/(?:date|תאריך)\s*[:：-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)||[])[1]),total=money((plain.match(/(?:total|סה.?כ|לתשלום)\s*[:：-]?\s*(?:₪|ש.?ח)?\s*([\d,.]+)/i)||[])[1]);
+  const plain=decodeHtml(text).replace(/\s+/g,' '),merchant=(plain.match(/(?:merchant|בית עסק|ספק)\s*[:：-]\s*([^|;]{2,80})/i)||[])[1]?.trim()||filenameMerchant(filename),date=isoDate((plain.match(/(?:date|תאריך)\s*[:：-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i)||[])[1])||uniqueDate(plain,filename),total=money((plain.match(/(?:total|סה.?כ|סך\s*הכל|לתשלום|סכום\s*כולל)[^\d]{0,40}([\d,.]+)/i)||[])[1]);
   return {filename,fileType:'pdf',merchant,date,total,valid:Boolean(merchant&&date&&total),parseStatus:merchant&&date&&total?'parsed':'unresolved',fallback:'embedded_text_only'};
 }
 
