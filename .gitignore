@@ -41,5 +41,7 @@ Desktop.ini
 uploads/
 historical-data/
 private-data/
+historical-receipts/
+private-receipts/
 /*.csv
 /*.xlsx

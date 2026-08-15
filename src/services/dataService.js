@@ -8,11 +8,16 @@ import { rerunDeferredReconciliation } from './reviewReconciliation.js';
 import { analyzeHistoricalRecords, approveHistoricalProposal, bulkApproveSafeHistoricalRules } from './historicalLearning.js';
 import { generateId } from '../utils/id.js';
 import { completeMadridChallengeExactlyOnce } from './madridGoal.js';
+import { persistableReceiptKnowledge } from './historicalReceiptLearning.js';
 
 const RULE_STORAGE_KEY='family-finance:classification-rules:v1';
 let memoryRuleStore=[];
 const loadRules=()=>{try{const stored=globalThis.localStorage?.getItem(RULE_STORAGE_KEY);return stored?JSON.parse(stored):structuredClone(memoryRuleStore)}catch{return structuredClone(memoryRuleStore)}};
 const persistRules=rules=>{memoryRuleStore=structuredClone(rules);try{globalThis.localStorage?.setItem(RULE_STORAGE_KEY,JSON.stringify(rules))}catch{/* In-memory fallback. */}};
+const RECEIPT_KNOWLEDGE_STORAGE_KEY='family-finance:receipt-knowledge:v1';
+let memoryReceiptKnowledge={merchantAliases:[],receiptMatchingPatterns:[],sourceRelationships:[],itemFamilyEvidence:[]};
+const loadReceiptKnowledge=()=>{try{const stored=globalThis.localStorage?.getItem(RECEIPT_KNOWLEDGE_STORAGE_KEY);return stored?JSON.parse(stored):structuredClone(memoryReceiptKnowledge)}catch{return structuredClone(memoryReceiptKnowledge)}};
+const persistReceiptKnowledge=knowledge=>{memoryReceiptKnowledge=structuredClone(knowledge);try{globalThis.localStorage?.setItem(RECEIPT_KNOWLEDGE_STORAGE_KEY,JSON.stringify(knowledge))}catch{/* In-memory fallback. */}};
 
 export class FinanceDataService {
   async getTransactions() { throw new Error('Not implemented'); }
@@ -21,7 +26,7 @@ export class FinanceDataService {
 }
 
 export class MockFinanceDataService extends FinanceDataService {
-  constructor() { super(); this.transactions = structuredClone(transactions); this.receipts = structuredClone(receipts); this.importSources=structuredClone(importSources); this.expectedDocuments=structuredClone(expectedDocuments); this.importRuns=structuredClone(importRuns); this.importIssues=structuredClone(importIssues); this.reminderTasks=structuredClone(reminderTasks);this.tasks=structuredClone(tasks);this.xpEvents=structuredClone(xpEvents);this.userScores=structuredClone(userScores);this.challenges=structuredClone(challenges);this.madridGoal=structuredClone(madridGoal);this.achievements=structuredClone(achievements);this.notificationRules=structuredClone(notificationRules);this.rewardConfig=structuredClone(rewardConfig);this.lastXPEvent=null;this.sourceRecords=[];this.canonicalEvents=[];this.classificationRules=loadRules();this.historicalLearning=null;globalThis.__familyFinanceClassificationRules=this.classificationRules; }
+  constructor() { super(); this.transactions = structuredClone(transactions); this.receipts = structuredClone(receipts); this.importSources=structuredClone(importSources); this.expectedDocuments=structuredClone(expectedDocuments); this.importRuns=structuredClone(importRuns); this.importIssues=structuredClone(importIssues); this.reminderTasks=structuredClone(reminderTasks);this.tasks=structuredClone(tasks);this.xpEvents=structuredClone(xpEvents);this.userScores=structuredClone(userScores);this.challenges=structuredClone(challenges);this.madridGoal=structuredClone(madridGoal);this.achievements=structuredClone(achievements);this.notificationRules=structuredClone(notificationRules);this.rewardConfig=structuredClone(rewardConfig);this.lastXPEvent=null;this.sourceRecords=[];this.canonicalEvents=[];this.classificationRules=loadRules();this.receiptKnowledge=loadReceiptKnowledge();this.historicalLearning=null;globalThis.__familyFinanceClassificationRules=this.classificationRules; }
   async getTransactions() { return structuredClone(this.transactions); }
   async getReceipts() { return structuredClone(this.receipts); }
   async getRecurring() { return structuredClone(recurring); }
@@ -31,6 +36,8 @@ export class MockFinanceDataService extends FinanceDataService {
   async analyzeHistoricalRecords(records,options={}) { this.historicalLearning=analyzeHistoricalRecords(records,options);return structuredClone(this.historicalLearning); }
   async approveHistoricalRule(proposalId,overrides={}) { const proposal=this.historicalLearning?.proposals.find(item=>item.id===proposalId);if(!proposal)throw new Error('Historical proposal not found');const rule=approveHistoricalProposal(proposal,overrides);await this.saveClassificationRule(rule);proposal.status='approved';return structuredClone({learning:this.historicalLearning,rules:this.classificationRules}); }
   async bulkApproveHistoricalRules() { if(!this.historicalLearning)return {learning:null,rules:await this.getClassificationRules()};for(const rule of bulkApproveSafeHistoricalRules(this.historicalLearning))await this.saveClassificationRule(rule);this.historicalLearning.proposals=this.historicalLearning.proposals.map(item=>item.confidence==='high'?{...item,status:'approved'}:item);return structuredClone({learning:this.historicalLearning,rules:this.classificationRules}); }
+  async getReceiptKnowledge() { return structuredClone(this.receiptKnowledge); }
+  async saveHistoricalReceiptKnowledge(result) { this.receiptKnowledge=persistableReceiptKnowledge(result);persistReceiptKnowledge(this.receiptKnowledge);return this.getReceiptKnowledge(); }
   async rejectHistoricalRule(proposalId) { if(this.historicalLearning)this.historicalLearning.proposals=this.historicalLearning.proposals.map(item=>item.id===proposalId?{...item,status:'rejected'}:item);return structuredClone(this.historicalLearning); }
   async getIngestionState() { return structuredClone({sources:this.importSources,expectedDocuments:this.expectedDocuments,importRuns:this.importRuns,issues:this.importIssues,reminders:this.reminderTasks}); }
   async getEngagementState() { return structuredClone({tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores,challenges:this.challenges,madridGoal:this.madridGoal,achievements:this.achievements,notificationRules:this.notificationRules,rewardConfig:this.rewardConfig,lastXPEvent:this.lastXPEvent}); }
