@@ -24,6 +24,6 @@ export function createBackend({config,repository,gmail,verifyPush=verifyGoogleOi
     if(req.method==='POST'&&url.pathname==='/api/gmail/staging/acknowledge'){const payload=await body(req);return json(res,200,await handoff.acknowledge(payload.messageId,{documentFingerprints:payload.documentFingerprints}))}
     if(req.method==='DELETE'&&url.pathname==='/api/gmail/connection')return json(res,200,await sync.disconnect(url.searchParams.get('connectionId')||'primary'));
     return json(res,404,{error:'not_found'});
-  }catch(error){console.error(JSON.stringify({event:'backend_request_failed',path:req.url,code:error.code||'request_failed'}));return json(res,error.code==='oauth_revoked'?401:500,{error:error.code||'request_failed'})}})}
+  }catch(error){console.error(JSON.stringify({event:'backend_request_failed',path:new URL(req.url,config.publicBaseUrl).pathname,code:error.code||'request_failed',status:error.status||null,message:error.message||'Unknown error'}));return json(res,error.code==='oauth_revoked'?401:500,{error:error.code||'request_failed'})}})}
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const config=loadConfig(),server=createBackend({config});server.listen(config.port,'0.0.0.0',()=>console.log(`Gmail backend listening on port ${config.port}`))}
