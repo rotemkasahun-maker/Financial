@@ -1,9 +1,11 @@
 import { daysBetween, merchantSimilarity } from './finance.js';
+import { matchExpectedReimbursement } from './reimbursementTracking.js';
 
 const incoming=direction=>['credit','incoming'].includes(direction);
 const sourceKind=record=>record.sourceType||record.sourceMetadata?.sourceType||'';
 
-export function reconcileBeforeReview(row,{historicalTransactions=[],sourceRecords=[],receipts=[],gmailRecords=[],smsRecords=[],walletRecords=[],cardTransactions=[]}={}){
+export function reconcileBeforeReview(row,{historicalTransactions=[],sourceRecords=[],receipts=[],gmailRecords=[],smsRecords=[],walletRecords=[],cardTransactions=[],reimbursementExpectations=[],reimbursementExpenses=[]}={}){
+  const expectedReimbursement=matchExpectedReimbursement(row,reimbursementExpectations,reimbursementExpenses);if(expectedReimbursement&&expectedReimbursement.confidence!=='low')return {...expectedReimbursement,matchingRecordId:expectedReimbursement.expenseTransactionId||null};
   const cardSettlement=reconcileCardSettlement(row,cardTransactions);if(cardSettlement)return cardSettlement;
   const candidates=[
     ...historicalTransactions.map(record=>({...record,evidenceType:'historical'})),
