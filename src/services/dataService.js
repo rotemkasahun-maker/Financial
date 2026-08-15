@@ -18,6 +18,8 @@ const RECEIPT_KNOWLEDGE_STORAGE_KEY='family-finance:receipt-knowledge:v1';
 let memoryReceiptKnowledge={merchantAliases:[],receiptMatchingPatterns:[],sourceRelationships:[],itemFamilyEvidence:[]};
 const loadReceiptKnowledge=()=>{try{const stored=globalThis.localStorage?.getItem(RECEIPT_KNOWLEDGE_STORAGE_KEY);return stored?JSON.parse(stored):structuredClone(memoryReceiptKnowledge)}catch{return structuredClone(memoryReceiptKnowledge)}};
 const persistReceiptKnowledge=knowledge=>{memoryReceiptKnowledge=structuredClone(knowledge);try{globalThis.localStorage?.setItem(RECEIPT_KNOWLEDGE_STORAGE_KEY,JSON.stringify(knowledge))}catch{/* In-memory fallback. */}};
+const hasTotalsImpact=financialType=>!['unknown','transfer','savings_transfer','investment_transfer','capital_allocation','credit_card_settlement'].includes(financialType);
+const applyHighConfidenceRulesToReviewState=service=>{service.transactions=service.transactions.map(transaction=>{if(!['required','deferred'].includes(transaction.reviewStatus))return transaction;const matched=applySavedClassificationRules(transaction,service.classificationRules);if(matched?.confidence!=='high')return transaction;service.tasks=closeDeferredReviewTask(transaction.id,service.tasks);return {...transaction,financialType:matched.financialType,category:matched.category,reviewStatus:'resolved_automatically',reviewReason:null,classificationConfidence:'high',classificationExplanation:matched.explanation,countInTotals:hasTotalsImpact(matched.financialType)}})};
 
 export class FinanceDataService {
   async getTransactions() { throw new Error('Not implemented'); }
@@ -31,7 +33,7 @@ export class MockFinanceDataService extends FinanceDataService {
   async getReceipts() { return structuredClone(this.receipts); }
   async getRecurring() { return structuredClone(recurring); }
   async getClassificationRules() { return structuredClone(this.classificationRules); }
-  async hydrateClassificationRules(rules=[]) { this.classificationRules=mergeHydratedClassificationRules(this.classificationRules,rules);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
+  async hydrateClassificationRules(rules=[]) { this.classificationRules=mergeHydratedClassificationRules(this.classificationRules,rules);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);applyHighConfidenceRulesToReviewState(this);return this.getClassificationRules(); }
   async saveClassificationRule(rule) { this.classificationRules=upsertClassificationRule(this.classificationRules,rule);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async disableClassificationRule(id) { this.classificationRules=disableClassificationRule(this.classificationRules,id);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async analyzeHistoricalRecords(records,options={}) { this.historicalLearning=analyzeHistoricalRecords(records,options);return structuredClone(this.historicalLearning); }
@@ -76,6 +78,9 @@ MockFinanceDataService.prototype.saveClassificationRule=async function(rule){
   this.transactions=this.transactions.map(transaction=>{if(transaction.reviewStatus!=='deferred')return transaction;const matched=applySavedClassificationRules(transaction,rules);if(matched?.confidence!=='high')return transaction;this.tasks=closeDeferredReviewTask(transaction.id,this.tasks);return {...transaction,financialType:matched.financialType,category:matched.category,reviewStatus:'resolved_automatically',classificationExplanation:'פתרנו את התעלומה הזאת בשבילך ✓',countInTotals:!['transfer','unknown'].includes(matched.financialType)}});
   return rules;
 };
+
+const saveClassificationRuleWithDeferredCleanup=MockFinanceDataService.prototype.saveClassificationRule;
+MockFinanceDataService.prototype.saveClassificationRule=async function(rule){const rules=await saveClassificationRuleWithDeferredCleanup.call(this,rule);applyHighConfidenceRulesToReviewState(this);return rules};
 
 MockFinanceDataService.prototype.rerunDeferredItems=async function(evidence){
   this.transactions=this.transactions.map(transaction=>{if(transaction.reviewStatus!=='deferred')return transaction;const resolved=rerunDeferredReconciliation(transaction,evidence);if(resolved.reviewStatus==='resolved_automatically')this.tasks=closeDeferredReviewTask(transaction.id,this.tasks);return resolved});

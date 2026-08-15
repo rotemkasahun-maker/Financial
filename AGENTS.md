@@ -61,6 +61,7 @@ Primary mobile action:
 - First action: "צלמי קבלה"
 
 ## Engineering expectations
+- Follow `CODEX_WORKING_RULES.md` for persistent financial-integrity, automation, safety, testing, and delivery conventions.
 - Prefer a simple, maintainable architecture.
 - Add migrations/schema definitions if using a database.
 - Keep external service credentials in environment variables.
