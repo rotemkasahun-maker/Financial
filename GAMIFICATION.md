@@ -21,3 +21,7 @@ The system rewards useful actions, never spending less and never financial hards
 A missing-receipt task is created only after automatic Gmail/SMS/digital/uploaded receipt matching has had its configured waiting window. Its dedupe key is `missing_receipt:<transaction_id>`. The deep link is `receipt_capture` with `transactionId`, so capture opens with the likely match already selected.
 
 Task ownership uses explicit `userId`, then source/device/account metadata, otherwise household/unassigned. Challenges are configuration records; they may measure task completion or shared completeness. Android notification delivery is a future adapter and does not change task or rule semantics.
+
+## Madrid goal
+
+`MadridGoal` keeps the editable 15,000 ILS travel target, contributions and real saved amount separate from Madrid XP, levels and challenges. Demo savings are explicitly marked and never enter household totals. Future approved savings transfers, investment allocations or manual contributions can update `realSavedAmount`; XP events always have zero financial impact. Challenge and task rewards use dedupe keys so each useful action is awarded once, with no negative XP or spending-based competition.

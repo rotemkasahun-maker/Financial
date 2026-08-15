@@ -1,5 +1,7 @@
 export const rewardConfig={missing_receipt_completed:20,review_issue_resolved:10,expected_document_completed:15,receipt_before_reminder_bonus:5,weekly_receipt_streak:25};
 
+export const madridGoal={id:'madrid-main-goal',title:'הדרך למדריד',targetAmount:15000,realSavedAmount:3200,currency:'ILS',xp:0,level:1,isDemo:true,dataSource:'demo',participants:['demo-member-a','demo-member-b'],contributions:[],planningBreakdown:[{name:'טיסות',amount:3500},{name:'מלון',amount:4200},{name:'כרטיסים למשחק',amount:3000},{name:'אוכל ובילויים',amount:1800},{name:'תחבורה',amount:1000},{name:'מרווח ביטחון',amount:1500}]};
+
 export const userScores=[
   {userId:'demo-member-a',displayName:'רותם',xp:145,level:3,activeStreak:6},
   {userId:'demo-member-b',displayName:'שמואל',xp:120,level:3,activeStreak:4}
@@ -15,8 +17,10 @@ export const tasks=[
 export const xpEvents=[{id:'xp-demo-1',dedupeKey:'task:task-done-demo',userId:'demo-member-b',taskId:'task-done-demo',amount:20,reason:'missing_receipt_completed',createdAt:'2026-08-14T10:20:00Z'}];
 
 export const challenges=[
-  {id:'challenge-receipts-week',title:'שבוע בלי קבלות חסרות',type:'task_completion',taskType:'missing_receipt',target:5,current:3,startDate:'2026-08-10',endDate:'2026-08-16',participantIds:['demo-member-a','demo-member-b'],rewardXP:25,status:'active'},
-  {id:'challenge-complete-month',title:'מגיעים ל־100% שלמות',type:'data_completeness',target:100,current:17,startDate:'2026-08-01',endDate:'2026-08-31',participantIds:['household'],rewardXP:40,status:'active'}
+  {id:'challenge-receipts-week',title:'שבוע בלי קבלות חסרות',description:'מעלים את הקבלות בזמן ומשאירים את הרשימה נקייה',type:'task_completion',taskType:'missing_receipt',target:5,current:3,startDate:'2026-08-10',endDate:'2026-08-16',participantIds:['demo-member-a','demo-member-b'],rewardXP:25,status:'active'},
+  {id:'challenge-tasks-week',title:'סגרנו את כל המשימות השבוע',description:'עוד שתי פעולות קטנות והכול מסודר',type:'all_tasks',target:5,current:3,startDate:'2026-08-10',endDate:'2026-08-16',participantIds:['demo-member-a','demo-member-b'],rewardXP:35,status:'active'},
+  {id:'challenge-complete-month',title:'100% שלמות נתונים',description:'כל המקורות והמסמכים במקום',type:'data_completeness',target:100,current:17,startDate:'2026-08-01',endDate:'2026-08-31',participantIds:['household'],rewardXP:40,status:'active'},
+  {id:'challenge-zero-issues',title:'חודש בלי חריגים פתוחים',description:'פותרים רק דברים שבאמת צריכים החלטה',type:'zero_open_issues',target:1,current:0,startDate:'2026-08-01',endDate:'2026-08-31',participantIds:['household'],rewardXP:50,status:'active'}
 ];
 
 export const achievements=[

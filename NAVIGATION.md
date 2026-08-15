@@ -4,14 +4,13 @@ The current mobile information architecture deliberately keeps only four frequen
 
 - `dashboard` — בית
 - `transactions` — עסקאות
-- `receipts` — קבלות
+- `madridGoal` — מדריד
 - `tasks` — המשימות שלי
 
 Receipt capture is independent of route placement. The global camera action opens the same receipt-capture flow from every main screen, and task/deep links may open that flow with a preselected transaction.
 
-Lower-frequency screens remain routable and are exposed through the RTL management drawer. Desktop keeps the broader sidebar while using the same route IDs, so existing routes and deep links do not change.
+Receipt capture remains globally available through the camera action, while the receipts list is available in the RTL drawer. Lower-frequency screens remain routable and are exposed through that drawer. Desktop keeps the broader sidebar while using the same route IDs, so existing routes and deep links do not change.
 
 ## Reserved future destination: הדרך למדריד
 
-`madridGoal` is reserved as a future major route for a gamified household savings goal. It is intentionally not rendered or added to navigation yet. When the experience is mature, the primary navigation can become `בית | עסקאות | מדריד | משימות`, while the global receipt-camera action remains permanently available. Adding this route must not reuse or rename an existing route ID.
-
+`madridGoal` is now the major gamified household destination: `בית | עסקאות | מדריד | משימות`. Financial savings progress and Madrid XP are separate domains; XP never changes financial balances. The global receipt-camera action remains permanently available.
