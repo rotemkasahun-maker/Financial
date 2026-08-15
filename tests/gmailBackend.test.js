@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {GmailStateRepository,MemoryBlobStore} from '../backend/storage.ts';
 import {GmailSyncService} from '../backend/syncService.ts';
 import {extractDocumentUrls,isReceiptCandidate,minimalEvidence} from '../backend/receiptCandidate.ts';
+import {createBackend} from '../backend/server.ts';
 
 const key=Buffer.alloc(32,7).toString('base64');
 const receipt=id=>({id,threadId:`thread-${id}`,snippet:'קבלה זמינה',payload:{headers:[{name:'Subject',value:'הקבלה שלך'}],parts:[{mimeType:'application/pdf',filename:'receipt.pdf',body:{attachmentId:`attachment-${id}`}}]}});
@@ -29,3 +30,5 @@ test('linked receipt URL is extracted only after full candidate fetch without re
 test('storage abstraction encrypts persisted Gmail state and remains replaceable',async()=>{const blob=new MemoryBlobStore(),repository=new GmailStateRepository({blobStore:blob,encryptionKey:key});await repository.update(state=>{state.connections.primary={refreshToken:'secret-token'}});assert.equal(blob.value.includes(Buffer.from('secret-token')),false);const replacement=new GmailStateRepository({blobStore:blob,encryptionKey:key});assert.equal((await replacement.read()).connections.primary.refreshToken,'secret-token')});
 
 test('disconnect revokes token and deletes connection staging',async()=>{const {service,repository,calls}=setup();await service.connect({tokens:{access_token:'a',refresh_token:'r',expires_in:3600},email:'family@example.test'});await service.disconnect();assert.equal(calls.revoke,1);assert.equal(Object.keys((await repository.read()).connections).length,0)});
+
+test('health-only Cloud Run revision starts before Gmail credentials exist',async t=>{const server=createBackend({config:{publicBaseUrl:'http://127.0.0.1',gmailConfigured:false},repository:{},gmail:{}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());const {port}=server.address(),response=await fetch(`http://127.0.0.1:${port}/healthz`);assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'ok',service:'family-finance-gmail',gmailConfigured:false})});
