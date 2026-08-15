@@ -51,6 +51,12 @@ Each phone scans only its own SMS after explicit Android permission in a future 
 ## Persistence evolution
 
 The UI consumes `FinanceDataService`, not Sheets directly. `MockFinanceDataService` can be replaced with a Google Sheets adapter and later an authenticated shared API/database without redesigning the screens. Stable IDs and `externalSourceId` provide idempotency across two phones and several connectors.
+
+## Thin Gmail backend (Phase 1)
+
+The financial ledger remains client-local. `backend/` is a separate Node/TypeScript boundary that persists only encrypted Gmail OAuth/watch cursors, processed identities, and minimal receipt-evidence staging. It reads metadata first and retrieves full message structure only for receipt candidates. Evidence crosses `ReceiptEvidenceHandoff` into the existing receipt pipeline; the backend has no totals, task, XP, Madrid, or canonical-event write path.
+
+The persistence port supports an encrypted local file in development and one private Cloud Storage object in Cloud Run. The object is required because Cloud Run filesystems are disposable; it is not receipt object storage. Generation preconditions prevent two instances from silently overwriting state, and Pub/Sub safely retries conflicts.
 # Historical learning / bootstrap
 
 Historical files enter a read-only analysis boundary and never the live ledger. `historicalLearning.js` groups normalized evidence, honors explicit user classifications over heuristics, detects conflicts, and emits confidence-scored proposals. Only an explicit approval converts a proposal into the existing persistent `ClassificationRule` structure with `origin: historical_bootstrap`; reconciliation patterns use the same rule structure with `ruleType: reconciliation`.

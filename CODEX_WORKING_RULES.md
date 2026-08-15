@@ -24,6 +24,17 @@ Follow `AGENTS.md`, `PRODUCT_SPEC.md`, `ARCHITECTURE.md`, and `AUTOMATION_MAP.md
 - Preserve existing architecture, routes, deep links, and working behavior unless the request explicitly changes them.
 - Keep the UI Hebrew-first, RTL, mobile-first, usable at 390px, and free of core horizontal overflow.
 
+## Minimum Necessary Effort
+
+Optimize for minimum total cost while preserving correctness, financial integrity, and auditability. Cost includes user attention, Codex/AI tokens, compute and API calls, cloud spend, stored data, network traffic, implementation complexity, and maintenance burden.
+
+- Use the cheapest reliable escalation path: metadata → deterministic or saved rules → cross-source reconciliation → parser → AI/OCR only when necessary → user decision as the last resort.
+- Do not store data that can safely be reconstructed, reprocess resolved evidence, reconfirm known HIGH-confidence facts, or fetch full content when metadata is sufficient.
+- Do not introduce infrastructure without a current requirement. Prefer incremental/on-demand work over bulk processing.
+- Keep UX exception-first with progressive disclosure; batch low-priority tasks and notifications, and defer non-critical ambiguity instead of blocking.
+- Use AI only where cheaper deterministic methods are insufficient.
+- For Codex work, prefer delta prompts and existing docs, inspect relevant files first, avoid broad refactors, run focused tests while iterating, run the full suite/build once before a stable commit, and report concisely.
+
 ## Delivery
 
 - Add focused regression tests for every behavioral change, then run the full test suite and build.
