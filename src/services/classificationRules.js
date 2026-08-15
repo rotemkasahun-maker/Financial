@@ -18,29 +18,45 @@ export function ruleFromReviewDecision(row,decision){return createClassification
 export function categoryFor(target){return ({family_support:'עזרה מההורים',government_benefit:'קצבאות ומענקים',bank_credit:'ריבית וזיכויים מהבנק',income:'הכנסה שוטפת',reimbursement:'החזר',gift:'מתנה',transfer:'העברה פנימית',refund:'זיכוי',expense:'כללי',savings_transfer:'חיסכון',investment_transfer:'השקעות'})[target]||'ללא קטגוריה'}
 
 export function matchClassificationRule(rule,row){
-  if(!rule?.enabled||rule.direction!==directionOf(row))return {confidence:'none',score:0};
-  if(rule.sourceType&&row.sourceType&&rule.sourceType!==row.sourceType)return {confidence:'none',score:0};
+  if(!rule?.enabled)return {confidence:'none',score:0,failedFeatures:['rule_disabled']};
+  if(rule.direction!==directionOf(row))return {confidence:'none',score:0,failedFeatures:['direction']};
+  if(rule.sourceType&&row.sourceType&&rule.sourceType!==row.sourceType)return {confidence:'none',score:0,failedFeatures:['source_type']};
   const descriptionScore=Math.max(similarity(rule.descriptionPattern,row.description),similarity(rule.counterpartyPattern,row.merchant));
   const accountMatch=Boolean(rule.sourceAccount&&normalize(row.sourceAccount)===rule.sourceAccount);
   const referenceMatch=Boolean(rule.referencePattern&&normalize(String(row.reference||'').replace(/\d+/g,'#'))===rule.referencePattern);
   const amountMatch=rule.typicalAmount!==null&&Math.abs(Number(row.amount)-rule.typicalAmount)<=Number(rule.amountTolerance||0);
   // A monetary amount is supporting evidence only; one contextual identity signal is mandatory.
-  if(descriptionScore<.45&&!accountMatch&&!referenceMatch)return {confidence:'none',score:0};
+  if(descriptionScore<.45&&!accountMatch&&!referenceMatch)return {confidence:'none',score:0,failedFeatures:['identity_pattern'],amountMatch,descriptionScore,accountMatch,referenceMatch};
   const score=Math.min(1,descriptionScore*.55+(amountMatch?.2:0)+(rule.sourceType?.1:0)+(accountMatch?.1:0)+(referenceMatch?.05:0));
-  return {score,confidence:score>=.82?'high':score>=.62?'medium':'low',amountMatch,descriptionScore,accountMatch,referenceMatch};
+  const failedFeatures=[];if(rule.typicalAmount!==null&&!amountMatch)failedFeatures.push('amount_tolerance');if(rule.sourceAccount&&!accountMatch)failedFeatures.push('source_account');if(rule.referencePattern&&!referenceMatch)failedFeatures.push('reference_pattern');
+  return {score,confidence:score>=.82?'high':score>=.62?'medium':'low',amountMatch,descriptionScore,accountMatch,referenceMatch,failedFeatures};
 }
 
 export function applySavedClassificationRules(row,rules=[]){
   const matches=rules.map(rule=>({rule,...matchClassificationRule(rule,row)})).filter(match=>match.score>0).sort((a,b)=>b.score-a.score);
   const best=matches[0];if(!best||best.confidence==='low')return null;
   const explanation=best.confidence==='high'?'סווג אוטומטית לפי כלל ששמרת':'זוהה כדפוס מוכר לפי כלל ששמרת';
-  return {ruleId:best.rule.id,financialType:best.rule.target,category:best.rule.category,confidence:best.confidence,score:best.score,origin:'user_rule',explanation,requiresReview:best.confidence!=='high'};
+  return {ruleId:best.rule.id,financialType:best.rule.target,category:best.rule.category,confidence:best.confidence,score:best.score,origin:best.rule.origin||'user_rule',explanation,requiresReview:best.confidence!=='high'};
 }
 
 export function upsertClassificationRule(rules,newRule){
   const key=rule=>[rule.householdId,rule.target,rule.direction,rule.sourceType,rule.sourceAccount,rule.descriptionPattern,rule.counterpartyPattern].join('|');
   const index=rules.findIndex(rule=>key(rule)===key(newRule));if(index<0)return [...rules,newRule];
   return rules.map((rule,i)=>i===index?{...rule,...newRule,id:rule.id,createdAt:rule.createdAt,updatedAt:new Date().toISOString(),enabled:true}:rule);
+}
+
+export function mergeHydratedClassificationRules(existingRules=[],bootstrapRules=[]){
+  const key=rule=>[rule.householdId,rule.target,rule.direction,rule.sourceType,rule.sourceAccount,rule.descriptionPattern,rule.counterpartyPattern].join('|');
+  const merged=[...existingRules];
+  const canonicalTargets=new Set(['family_support','government_benefit','bank_credit']);
+  for(const sourceRule of bootstrapRules.filter(rule=>rule?.confidence==='high'&&rule.userApproved&&rule.origin==='historical_bootstrap')){
+    const incoming={...sourceRule,category:canonicalTargets.has(sourceRule.target)?categoryFor(sourceRule.target):sourceRule.category};
+    const index=merged.findIndex(rule=>rule.id===incoming.id||key(rule)===key(incoming));
+    if(index<0){merged.push({...incoming});continue}
+    const local=merged[index];if(local.origin==='user_rule'||local.enabled===false)continue;
+    merged[index]={...incoming,id:local.id||incoming.id,createdAt:local.createdAt||incoming.createdAt,updatedAt:new Date().toISOString()};
+  }
+  return merged;
 }
 
 export const disableClassificationRule=(rules,id)=>rules.map(rule=>rule.id===id?{...rule,enabled:false,updatedAt:new Date().toISOString()}:rule);

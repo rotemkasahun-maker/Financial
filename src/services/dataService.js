@@ -3,7 +3,7 @@ import { importSources, expectedDocuments, importRuns, importIssues, reminderTas
 import { tasks, xpEvents, userScores, challenges, achievements, notificationRules, rewardConfig, madridGoal } from '../data/gamificationMockData.js';
 import { completeReceiptTask, completeTaskExactlyOnce, ensureDeferredReviewTask, closeDeferredReviewTask } from './taskEngine.js';
 import { createSourceRecord, createCanonicalEvent } from './reconciliation.js';
-import { upsertClassificationRule, disableClassificationRule, applySavedClassificationRules } from './classificationRules.js';
+import { upsertClassificationRule, disableClassificationRule, applySavedClassificationRules, mergeHydratedClassificationRules } from './classificationRules.js';
 import { rerunDeferredReconciliation } from './reviewReconciliation.js';
 import { analyzeHistoricalRecords, approveHistoricalProposal, bulkApproveSafeHistoricalRules } from './historicalLearning.js';
 import { generateId } from '../utils/id.js';
@@ -31,6 +31,7 @@ export class MockFinanceDataService extends FinanceDataService {
   async getReceipts() { return structuredClone(this.receipts); }
   async getRecurring() { return structuredClone(recurring); }
   async getClassificationRules() { return structuredClone(this.classificationRules); }
+  async hydrateClassificationRules(rules=[]) { this.classificationRules=mergeHydratedClassificationRules(this.classificationRules,rules);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async saveClassificationRule(rule) { this.classificationRules=upsertClassificationRule(this.classificationRules,rule);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async disableClassificationRule(id) { this.classificationRules=disableClassificationRule(this.classificationRules,id);globalThis.__familyFinanceClassificationRules=this.classificationRules;persistRules(this.classificationRules);return this.getClassificationRules(); }
   async analyzeHistoricalRecords(records,options={}) { this.historicalLearning=analyzeHistoricalRecords(records,options);return structuredClone(this.historicalLearning); }
