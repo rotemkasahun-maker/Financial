@@ -1,15 +1,637 @@
-import {createHash} from 'node:crypto';
-import {isReceiptCandidate,minimalEvidence} from './receiptCandidate.ts';
+import { createHash } from 'node:crypto';
 
-const uniqueMessages=history=>[...new Set((history||[]).flatMap(item=>(item.messagesAdded||[]).map(entry=>entry.message?.id)).filter(Boolean))];
+import {
+  isReceiptCandidate,
+  minimalEvidence
+} from './receiptCandidate.ts';
+
+import {
+  GmailReceiptProcessor
+} from './gmailReceiptProcessor.ts';
+
+const uniqueMessages = history => [
+  ...new Set(
+    (history || [])
+      .flatMap(item =>
+        (item.messagesAdded || [])
+          .map(entry => entry.message?.id)
+      )
+      .filter(Boolean)
+  )
+];
+
 export class GmailSyncService {
-  constructor({repository,gmail,clock=()=>new Date()}){this.repository=repository;this.gmail=gmail;this.clock=clock}
-  async connect({connectionId='primary',tokens,email=null}){return this.repository.update(async state=>{const connection={id:connectionId,email,accessToken:tokens.access_token,refreshToken:tokens.refresh_token,accessTokenExpiresAt:Date.now()+Number(tokens.expires_in||3600)*1000,status:'connecting',lastSuccessfulSync:null};const {active,response}=await this.gmail.watch(connection);state.connections[connectionId]={...active,historyId:response.historyId,watchExpiration:Number(response.expiration),status:'active',lastError:null};return publicConnection(state.connections[connectionId])})}
-  async renewWatches(){return this.repository.update(async state=>{const results=[];for(const connection of Object.values(state.connections)){if(connection.status==='disconnected')continue;try{const {active,response}=await this.gmail.watch(connection);Object.assign(connection,active,{historyId:connection.historyId||response.historyId,watchExpiration:Number(response.expiration),status:'active',lastError:null});results.push({id:connection.id,ok:true})}catch(error){connection.status=error.code==='oauth_revoked'?'reconnect_required':'watch_failed';connection.lastError=error.code||'watch_failed';results.push({id:connection.id,ok:false,error:connection.lastError})}}return results})}
-  async processNotification({deliveryId,emailAddress,historyId}){return this.repository.update(async state=>{if(state.deliveries[deliveryId])return {status:'duplicate_delivery'};const connection=Object.values(state.connections).find(item=>item.email===emailAddress)||Object.values(state.connections)[0];if(!connection)return {status:'no_connection'};let ids=[],nextHistoryId=String(historyId),recovered=false;try{const result=await this.gmail.history(connection,connection.historyId);Object.assign(connection,result.active);ids=uniqueMessages(result.response.history);nextHistoryId=result.response.historyId||nextHistoryId}catch(error){if(error.status!==404)throw error;const result=await this.gmail.boundedRecovery(connection);Object.assign(connection,result.active);ids=(result.response.messages||[]).map(item=>item.id);recovered=true}
-    const staged=[];for(const id of ids){if(state.processedMessages[id])continue;const metadataResult=await this.gmail.getMessage(connection,id,'metadata');Object.assign(connection,metadataResult.active);const metadata=metadataResult.response;if(!isReceiptCandidate(metadata)){state.processedMessages[id]={status:'not_relevant',processedAt:this.clock().toISOString()};continue}const fullResult=await this.gmail.getMessage(connection,id,'full');Object.assign(connection,fullResult.active);const evidence=minimalEvidence(fullResult.response);state.staging[id]=evidence;state.processedMessages[id]={status:'staged',processedAt:this.clock().toISOString()};for(const attachment of evidence.attachmentIds)state.processedDocuments[`${id}:${attachment.id}`]={status:'pending_handoff',messageId:id};for(const url of evidence.documentUrls){const fingerprint=`url:${createHash('sha256').update(url).digest('hex')}`;if(!state.processedDocuments[fingerprint])state.processedDocuments[fingerprint]={status:'pending_handoff',messageId:id}}staged.push(evidence)}
-    connection.historyId=nextHistoryId;connection.status='active';connection.lastSuccessfulSync=this.clock().toISOString();connection.lastError=null;state.deliveries[deliveryId]={processedAt:this.clock().toISOString(),historyId:String(historyId)};return {status:'processed',stagedCount:staged.length,recovered}})}
-  async health(){const state=await this.repository.read();return {connections:Object.values(state.connections).map(publicConnection),stagedCount:Object.keys(state.staging).length}}
-  async disconnect(connectionId='primary'){return this.repository.update(async state=>{const connection=state.connections[connectionId];if(!connection)return {disconnected:true};const token=connection.refreshToken||connection.accessToken;try{if(token)await this.gmail.revoke(token)}finally{delete state.connections[connectionId];for(const [id,item] of Object.entries(state.staging))if(!item.connectionId||item.connectionId===connectionId)delete state.staging[id]}return {disconnected:true}})}
+  constructor({
+    repository,
+    gmail,
+    clock = () => new Date(),
+    receiptProcessor = null
+  }) {
+    this.repository = repository;
+    this.gmail = gmail;
+    this.clock = clock;
+
+    this.receiptProcessor =
+      receiptProcessor ||
+      new GmailReceiptProcessor({
+        gmail
+      });
+  }
+
+  async connect({
+    connectionId = 'primary',
+    tokens,
+    email = null
+  }) {
+    return this.repository.update(async state => {
+      const connection = {
+        id: connectionId,
+        email,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        accessTokenExpiresAt:
+          Date.now() +
+          Number(tokens.expires_in || 3600) * 1000,
+        status: 'connecting',
+        lastSuccessfulSync: null
+      };
+
+      const {
+        active,
+        response
+      } = await this.gmail.watch(connection);
+
+      state.connections[connectionId] = {
+        ...active,
+        historyId: response.historyId,
+        watchExpiration:
+          Number(response.expiration),
+        status: 'active',
+        lastError: null
+      };
+
+      return publicConnection(
+        state.connections[connectionId]
+      );
+    });
+  }
+
+  async renewWatches() {
+    return this.repository.update(async state => {
+      const results = [];
+
+      for (
+        const connection of
+        Object.values(state.connections)
+      ) {
+        if (
+          connection.status ===
+          'disconnected'
+        ) {
+          continue;
+        }
+
+        try {
+          const {
+            active,
+            response
+          } = await this.gmail.watch(
+            connection
+          );
+
+          Object.assign(
+            connection,
+            active,
+            {
+              historyId:
+                connection.historyId ||
+                response.historyId,
+              watchExpiration:
+                Number(
+                  response.expiration
+                ),
+              status: 'active',
+              lastError: null
+            }
+          );
+
+          results.push({
+            id: connection.id,
+            ok: true
+          });
+        } catch (error) {
+          connection.status =
+            error.code ===
+            'oauth_revoked'
+              ? 'reconnect_required'
+              : 'watch_failed';
+
+          connection.lastError =
+            error.code ||
+            'watch_failed';
+
+          results.push({
+            id: connection.id,
+            ok: false,
+            error:
+              connection.lastError
+          });
+        }
+      }
+
+      return results;
+    });
+  }
+
+  async processNotification({
+    deliveryId,
+    emailAddress,
+    historyId
+  }) {
+    return this.repository.update(
+      async state => {
+        if (
+          state.deliveries[
+            deliveryId
+          ]
+        ) {
+          return {
+            status:
+              'duplicate_delivery'
+          };
+        }
+
+        const connection =
+          Object.values(
+            state.connections
+          ).find(
+            item =>
+              item.email ===
+              emailAddress
+          ) ||
+          Object.values(
+            state.connections
+          )[0];
+
+        if (!connection) {
+          return {
+            status:
+              'no_connection'
+          };
+        }
+
+        let ids = [];
+        let nextHistoryId =
+          String(historyId);
+        let recovered = false;
+
+        try {
+          const result =
+            await this.gmail.history(
+              connection,
+              connection.historyId
+            );
+
+          Object.assign(
+            connection,
+            result.active
+          );
+
+          ids = uniqueMessages(
+            result.response.history
+          );
+
+          nextHistoryId =
+            result.response.historyId ||
+            nextHistoryId;
+        } catch (error) {
+          if (error.status !== 404) {
+            throw error;
+          }
+
+          const result =
+            await this.gmail
+              .boundedRecovery(
+                connection
+              );
+
+          Object.assign(
+            connection,
+            result.active
+          );
+
+          ids = (
+            result.response.messages ||
+            []
+          ).map(
+            item => item.id
+          );
+
+          recovered = true;
+        }
+
+        const staged = [];
+        let automaticallyProcessed = 0;
+        let reviewRequired = 0;
+
+        for (const id of ids) {
+          if (
+            state.processedMessages[
+              id
+            ]
+          ) {
+            continue;
+          }
+
+          const metadataResult =
+            await this.gmail.getMessage(
+              connection,
+              id,
+              'metadata'
+            );
+
+          Object.assign(
+            connection,
+            metadataResult.active
+          );
+
+          const metadata =
+            metadataResult.response;
+
+          if (
+            !isReceiptCandidate(
+              metadata
+            )
+          ) {
+            state.processedMessages[
+              id
+            ] = {
+              status:
+                'not_relevant',
+              processedAt:
+                this.clock()
+                  .toISOString()
+            };
+
+            continue;
+          }
+
+          const fullResult =
+            await this.gmail.getMessage(
+              connection,
+              id,
+              'full'
+            );
+
+          Object.assign(
+            connection,
+            fullResult.active
+          );
+
+          const evidence = {
+            ...minimalEvidence(
+              fullResult.response
+            ),
+            connectionId:
+              connection.id
+          };
+
+          /*
+           * Staging is written BEFORE automatic
+           * processing.
+           *
+           * This guarantees that a receipt is
+           * never lost if PDF extraction, OCR,
+           * OpenAI, or validation fails.
+           */
+          state.staging[id] =
+            evidence;
+
+          state.processedMessages[
+            id
+          ] = {
+            status: 'staged',
+            processedAt:
+              this.clock()
+                .toISOString()
+          };
+
+          for (
+            const attachment of
+            evidence.attachmentIds
+          ) {
+            const fingerprint =
+              `${id}:${attachment.id}`;
+
+            if (
+              !state.processedDocuments[
+                fingerprint
+              ]
+            ) {
+              state.processedDocuments[
+                fingerprint
+              ] = {
+                status:
+                  'pending_handoff',
+                messageId: id
+              };
+            }
+          }
+
+          for (
+            const url of
+            evidence.documentUrls
+          ) {
+            const fingerprint =
+              `url:${createHash(
+                'sha256'
+              )
+                .update(url)
+                .digest('hex')}`;
+
+            if (
+              !state.processedDocuments[
+                fingerprint
+              ]
+            ) {
+              state.processedDocuments[
+                fingerprint
+              ] = {
+                status:
+                  'pending_handoff',
+                messageId: id
+              };
+            }
+          }
+
+          /*
+           * Try automatic PDF processing.
+           *
+           * Images and linked documents remain
+           * available in staging until their
+           * dedicated processing flow is added.
+           */
+          try {
+            const processing =
+              await this.receiptProcessor
+                .process(
+                  connection,
+                  evidence
+                );
+
+            state.staging[id] = {
+              ...evidence,
+              automaticProcessing:
+                processing
+            };
+
+            if (
+              processing.status ===
+              'processed'
+            ) {
+              automaticallyProcessed += 1;
+
+              state.processedMessages[
+                id
+              ] = {
+                status:
+                  'receipt_processed',
+                processedAt:
+                  this.clock()
+                    .toISOString()
+              };
+
+              const fingerprint =
+                `${id}:${processing.attachmentId}`;
+
+              state.processedDocuments[
+                fingerprint
+              ] = {
+                status:
+                  'receipt_processed',
+                messageId: id,
+                processedAt:
+                  this.clock()
+                    .toISOString()
+              };
+            } else if (
+              processing.status ===
+              'review_required'
+            ) {
+              reviewRequired += 1;
+
+              state.processedMessages[
+                id
+              ] = {
+                status:
+                  'review_required',
+                processedAt:
+                  this.clock()
+                    .toISOString(),
+                reason:
+                  processing.reason
+              };
+
+              if (
+                processing.attachmentId
+              ) {
+                const fingerprint =
+                  `${id}:${processing.attachmentId}`;
+
+                state.processedDocuments[
+                  fingerprint
+                ] = {
+                  status:
+                    'review_required',
+                  messageId: id,
+                  processedAt:
+                    this.clock()
+                      .toISOString(),
+                  reason:
+                    processing.reason
+                };
+              }
+            }
+          } catch (error) {
+            /*
+             * Automatic processing must NEVER
+             * break Gmail synchronization.
+             *
+             * Keep the receipt in staging and
+             * mark it for review.
+             */
+            reviewRequired += 1;
+
+            state.staging[id] = {
+              ...evidence,
+              automaticProcessing: {
+                status:
+                  'review_required',
+                reason:
+                  'automatic_processing_failed'
+              }
+            };
+
+            state.processedMessages[
+              id
+            ] = {
+              status:
+                'review_required',
+              processedAt:
+                this.clock()
+                  .toISOString(),
+              reason:
+                'automatic_processing_failed'
+            };
+
+            console.error(
+              JSON.stringify({
+                event:
+                  'gmail_receipt_processing_failed',
+                messageId: id,
+                code:
+                  error?.code ||
+                  'receipt_processing_failed',
+                message:
+                  error?.message ||
+                  'Unknown receipt processing error'
+              })
+            );
+          }
+
+          staged.push(
+            state.staging[id]
+          );
+        }
+
+        connection.historyId =
+          nextHistoryId;
+
+        connection.status =
+          'active';
+
+        connection.lastSuccessfulSync =
+          this.clock()
+            .toISOString();
+
+        connection.lastError =
+          null;
+
+        state.deliveries[
+          deliveryId
+        ] = {
+          processedAt:
+            this.clock()
+              .toISOString(),
+          historyId:
+            String(historyId)
+        };
+
+        return {
+          status: 'processed',
+          stagedCount:
+            staged.length,
+          automaticallyProcessed,
+          reviewRequired,
+          recovered
+        };
+      }
+    );
+  }
+
+  async health() {
+    const state =
+      await this.repository.read();
+
+    return {
+      connections:
+        Object.values(
+          state.connections
+        ).map(
+          publicConnection
+        ),
+
+      stagedCount:
+        Object.keys(
+          state.staging
+        ).length
+    };
+  }
+
+  async disconnect(
+    connectionId = 'primary'
+  ) {
+    return this.repository.update(
+      async state => {
+        const connection =
+          state.connections[
+            connectionId
+          ];
+
+        if (!connection) {
+          return {
+            disconnected: true
+          };
+        }
+
+        const token =
+          connection.refreshToken ||
+          connection.accessToken;
+
+        try {
+          if (token) {
+            await this.gmail.revoke(
+              token
+            );
+          }
+        } finally {
+          delete state.connections[
+            connectionId
+          ];
+
+          for (
+            const [
+              id,
+              item
+            ] of Object.entries(
+              state.staging
+            )
+          ) {
+            if (
+              !item.connectionId ||
+              item.connectionId ===
+                connectionId
+            ) {
+              delete state.staging[
+                id
+              ];
+            }
+          }
+        }
+
+        return {
+          disconnected: true
+        };
+      }
+    );
+  }
 }
-const publicConnection=connection=>({id:connection.id,email:connection.email,status:connection.status,historyId:connection.historyId||null,watchExpiration:connection.watchExpiration||null,lastSuccessfulSync:connection.lastSuccessfulSync||null,lastError:connection.lastError||null});
+
+const publicConnection =
+  connection => ({
+    id: connection.id,
+    email: connection.email,
+    status: connection.status,
+    historyId:
+      connection.historyId ||
+      null,
+    watchExpiration:
+      connection.watchExpiration ||
+      null,
+    lastSuccessfulSync:
+      connection.lastSuccessfulSync ||
+      null,
+    lastError:
+      connection.lastError ||
+      null
+  });
