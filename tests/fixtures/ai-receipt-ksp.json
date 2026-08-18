@@ -1,0 +1,83 @@
+{
+  "merchant": "KSP",
+  "rawMerchant": "48 קיי אס פי מחשבים פ\"ת דרך רבין בע\"מ",
+  "purchaseDate": "2026-03-22",
+  "purchaseTime": "13:42",
+  "total": "204.00",
+  "currency": "ILS",
+  "invoiceNumber": "584191",
+  "receiptNumber": "5483248",
+  "paymentMethod": "Visa credit card",
+  "cardLast4": "4711",
+  "vat": "31.12",
+  "subtotalBeforeVat": "172.88",
+  "items": [
+    {
+      "name": "Bosch V-Line 103 Pcs Drill & Screwdriver Bits Set (2 607 017 367)",
+      "quantity": 1,
+      "unitPrice": "115.00",
+      "totalPrice": "115.00",
+      "discount": "-16.00"
+    },
+    {
+      "name": "Sano Ritzpaz Floor Cleaner For Home Wash Machine Dreamy Hotel Fragrance 1.5L",
+      "quantity": 1,
+      "unitPrice": "28.00",
+      "totalPrice": "28.00",
+      "discount": null
+    },
+    {
+      "name": "Sano Anti Kalk Cleaning Wipes 50Pcs",
+      "quantity": 1,
+      "unitPrice": "13.00",
+      "totalPrice": "13.00",
+      "discount": "-13.00"
+    },
+    {
+      "name": "Sano Cleaning Spray For Stainless Steel 500ml",
+      "quantity": 1,
+      "unitPrice": "20.00",
+      "totalPrice": "20.00",
+      "discount": "-3.00"
+    },
+    {
+      "name": "Fairy Dishwashing Liquid Lemon Scent 900ml",
+      "quantity": 1,
+      "unitPrice": "16.00",
+      "totalPrice": "16.00",
+      "discount": null
+    },
+    {
+      "name": "Sano Javel Cleaning Foam White Flowering 1L",
+      "quantity": 1,
+      "unitPrice": "16.00",
+      "totalPrice": "16.00",
+      "discount": "-1.99"
+    },
+    {
+      "name": "Sano Javel Bleach 2L Lavender",
+      "quantity": 1,
+      "unitPrice": "11.00",
+      "totalPrice": "11.00",
+      "discount": "-1.00"
+    },
+    {
+      "name": "Sod Concentrated Fabric Softener Floral Crisp Scent 900ml",
+      "quantity": 1,
+      "unitPrice": "9.99",
+      "totalPrice": "9.99",
+      "discount": null
+    },
+    {
+      "name": "Shiny Trash Bags Thick 75X90 25Pcs",
+      "quantity": 1,
+      "unitPrice": "9.99",
+      "totalPrice": "9.99",
+      "discount": null
+    }
+  ],
+  "confidence": 0.94,
+  "warnings": [
+    "Promotional discounts were matched to nearby purchased items based on receipt order."
+  ]
+}
