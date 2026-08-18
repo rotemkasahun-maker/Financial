@@ -1,241 +1,130 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+export class ReceiptIngestionService {
+  constructor({ importPipeline }) {
+    this.importPipeline = importPipeline;
+  }
 
-import {
-  ImportPipeline
-} from '../src/shared/importPipeline.js';
-
-import {
-  ReceiptIngestionService
-} from '../backend/receiptIngestionService.ts';
-
-function setup({
-  transactions = []
-} = {}) {
-  const receipts = [];
-
-  const dataService = {
-    async getTransactions() {
-      return structuredClone(
-        transactions
-      );
-    },
-
-    async saveReceipt(
-      receipt,
-      linkedId
+  async ingest({
+    connection,
+    evidence,
+    processing
+  }) {
+    if (
+      processing?.status !== 'processed' ||
+      !processing.receipt?.extraction
     ) {
-      const saved = {
-        ...receipt,
-        id: 'saved-receipt',
-        linkedTransactionId:
-          linkedId || null
+      return {
+        status: 'review_required',
+        reason: 'receipt_not_ready_for_ingestion'
       };
+    }
 
-      receipts.push(saved);
+    const extraction =
+      processing.receipt.extraction;
 
-      return structuredClone(
-        saved
+    const envelope = {
+      id: `gmail:${evidence.messageId}`,
+      householdId: 'demo-household',
+      userId: 'demo-member-a',
+      deviceId: 'gmail-connector',
+
+      sourceType: 'gmail',
+
+      sourceAccount:
+        connection?.email ||
+        connection?.id ||
+        null,
+
+      externalSourceId:
+        evidence.messageId,
+
+      metadata: {
+        email: {
+          messageId:
+            evidence.messageId,
+
+          threadId:
+            evidence.threadId || null,
+
+          subject:
+            evidence.subject || null,
+
+          from:
+            evidence.from || null,
+
+          receivedAt:
+            evidence.receivedAt || null,
+
+          attachmentId:
+            processing.attachmentId ||
+            null,
+
+          filename:
+            processing.filename ||
+            null
+        },
+
+        aiValidation:
+          processing.receipt.validation ||
+          null
+      },
+
+      importedAt:
+        new Date().toISOString(),
+
+      status: 'received',
+
+      payload: {
+        fileName:
+          processing.filename ||
+          'gmail-receipt.pdf',
+
+        fileType:
+          'application/pdf'
+      }
+    };
+
+    const prepared =
+      await this.importPipeline.prepareExtracted(
+        envelope,
+        extraction
       );
+
+    const highMatch =
+      prepared.matches.find(
+        item =>
+          item.confidence === 'high'
+      );
+
+    /*
+     * Safety rule:
+     * automatically save only when the receipt
+     * matches an existing financial transaction
+     * with high confidence.
+     *
+     * Unmatched receipts stay in review and do not
+     * create a new expense automatically.
+     */
+    if (!highMatch) {
+      return {
+        status: 'review_required',
+        reason:
+          'no_high_confidence_transaction_match',
+        prepared
+      };
     }
-  };
 
-  const importPipeline =
-    new ImportPipeline({
-      extractor: null,
-      dataService
-    });
+    const saved =
+      await this.importPipeline.commit(
+        prepared,
+        highMatch.id
+      );
 
-  const service =
-    new ReceiptIngestionService({
-      importPipeline
-    });
-
-  return {
-    service,
-    receipts
-  };
+    return {
+      status: 'linked_automatically',
+      transactionId:
+        highMatch.id,
+      saved,
+      prepared
+    };
+  }
 }
-
-const evidence = {
-  messageId: 'gmail-message-1',
-  threadId: 'thread-1',
-  subject: 'הקבלה שלך',
-  from: 'store@example.test',
-  receivedAt:
-    '2026-08-18T10:00:00Z'
-};
-
-const processing = {
-  status: 'processed',
-
-  attachmentId:
-    'attachment-1',
-
-  filename:
-    'receipt.pdf',
-
-  receipt: {
-    extraction: {
-      merchant: 'KSP',
-      purchaseDate:
-        '2026-03-22',
-      total: '204.00',
-      currency: 'ILS',
-      confidence: 0.97,
-      warnings: [],
-      items: []
-    },
-
-    validation: {
-      valid: true,
-      safeForAutomaticSave:
-        true,
-      requiresReview:
-        false
-    }
-  }
-};
-
-test(
-  'high-confidence transaction match links receipt automatically',
-  async () => {
-    const {
-      service,
-      receipts
-    } = setup({
-      transactions: [
-        {
-          id:
-            'transaction-ksp',
-          date:
-            '2026-03-22',
-          merchant: 'KSP',
-          amount: 204,
-          financialType:
-            'expense'
-        }
-      ]
-    });
-
-    const result =
-      await service.ingest({
-        connection: {
-          id: 'primary',
-          email:
-            'family@example.test'
-        },
-
-        evidence,
-        processing
-      });
-
-    assert.equal(
-      result.status,
-      'linked_automatically'
-    );
-
-    assert.equal(
-      result.transactionId,
-      'transaction-ksp'
-    );
-
-    assert.equal(
-      receipts.length,
-      1
-    );
-
-    assert.equal(
-      receipts[0]
-        .linkedTransactionId,
-      'transaction-ksp'
-    );
-
-    assert.equal(
-      receipts[0]
-        .sourceMetadata
-        .sourceType,
-      'gmail'
-    );
-
-    assert.equal(
-      receipts[0]
-        .sourceMetadata
-        .externalSourceId,
-      'gmail-message-1'
-    );
-  }
-);
-
-test(
-  'unmatched receipt requires review and is not saved automatically',
-  async () => {
-    const {
-      service,
-      receipts
-    } = setup({
-      transactions: []
-    });
-
-    const result =
-      await service.ingest({
-        connection: {
-          id: 'primary',
-          email:
-            'family@example.test'
-        },
-
-        evidence,
-        processing
-      });
-
-    assert.equal(
-      result.status,
-      'review_required'
-    );
-
-    assert.equal(
-      result.reason,
-      'no_high_confidence_transaction_match'
-    );
-
-    assert.equal(
-      receipts.length,
-      0
-    );
-  }
-);
-
-test(
-  'receipt that did not pass processing cannot enter financial storage',
-  async () => {
-    const {
-      service,
-      receipts
-    } = setup();
-
-    const result =
-      await service.ingest({
-        connection: {
-          id: 'primary'
-        },
-
-        evidence,
-
-        processing: {
-          status:
-            'review_required'
-        }
-      });
-
-    assert.equal(
-      result.status,
-      'review_required'
-    );
-
-    assert.equal(
-      receipts.length,
-      0
-    );
-  }
-);

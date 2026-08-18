@@ -887,7 +887,8 @@ test(
         status: 'ok',
         service:
           'family-finance-gmail',
-        gmailConfigured: false
+        gmailConfigured: false,
+        financeConfigured: false
       }
     );
   }
