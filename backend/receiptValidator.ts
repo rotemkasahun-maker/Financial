@@ -5,7 +5,7 @@ import type {
 
 export type ReceiptValidationIssue = {
   field: string;
-  severity: 'warning' | 'error';
+  severity: 'info' | 'warning' | 'error';
   code: string;
   message: string;
 };
@@ -22,6 +22,21 @@ export type ReceiptValidationResult = {
 const AUTO_SAVE_CONFIDENCE = 0.90;
 const MIN_ACCEPTABLE_CONFIDENCE = 0.70;
 
+/*
+ * Only warnings that cast doubt on the financial
+ * identity of the receipt block automation.
+ *
+ * Item-level imperfections and descriptive AI notes
+ * do not prevent linking a validated receipt to an
+ * already-existing transaction.
+ */
+const BLOCKING_WARNING_CODES = new Set([
+  'review_confidence',
+  'missing_currency',
+  'future_date',
+  'vat_arithmetic_mismatch'
+]);
+
 export function validateReceiptExtraction(
   receipt: AiReceiptExtraction
 ): ReceiptValidationResult {
@@ -30,45 +45,80 @@ export function validateReceiptExtraction(
   validateRequiredFields(receipt, issues);
   validateConfidence(receipt, issues);
   validateDate(receipt.purchaseDate, issues);
-  validateMoneyField('total', receipt.total, issues, true);
-  validateMoneyField('vat', receipt.vat, issues);
+
+  validateMoneyField(
+    'total',
+    receipt.total,
+    issues,
+    true
+  );
+
+  validateMoneyField(
+    'vat',
+    receipt.vat,
+    issues
+  );
+
   validateMoneyField(
     'subtotalBeforeVat',
     receipt.subtotalBeforeVat,
     issues
   );
+
   validateCard(receipt, issues);
   validateItems(receipt.items, issues);
   validateArithmetic(receipt, issues);
 
-  for (const warning of receipt.warnings ?? []) {
-    issues.push({
-      field: 'ai',
-      severity: 'warning',
-      code: 'ai_warning',
-      message: warning
-    });
+  /*
+   * Free-form AI warnings are preserved for audit
+   * and UI display, but they are informational.
+   *
+   * Financial safety is determined by deterministic
+   * validation above.
+   */
+  for (const message of receipt.warnings ?? []) {
+    info(
+      issues,
+      'ai',
+      'ai_note',
+      message
+    );
   }
 
-  const hasErrors = issues.some(
-    issue => issue.severity === 'error'
-  );
+  const hasErrors =
+    issues.some(
+      issue =>
+        issue.severity === 'error'
+    );
 
-  const hasWarnings = issues.some(
-    issue => issue.severity === 'warning'
-  );
+  const hasBlockingWarnings =
+    issues.some(
+      issue =>
+        issue.severity === 'warning' &&
+        BLOCKING_WARNING_CODES.has(
+          issue.code
+        )
+    );
 
   const safeForAutomaticSave =
     !hasErrors &&
-    !hasWarnings &&
-    receipt.confidence >= AUTO_SAVE_CONFIDENCE;
+    !hasBlockingWarnings &&
+    receipt.confidence >=
+      AUTO_SAVE_CONFIDENCE;
 
   return {
     valid: !hasErrors,
+
     safeForAutomaticSave,
-    requiresReview: !safeForAutomaticSave,
-    confidence: receipt.confidence,
+
+    requiresReview:
+      !safeForAutomaticSave,
+
+    confidence:
+      receipt.confidence,
+
     issues,
+
     receipt
   };
 }
@@ -77,7 +127,10 @@ function validateRequiredFields(
   receipt: AiReceiptExtraction,
   issues: ReceiptValidationIssue[]
 ): void {
-  if (!receipt.merchant && !receipt.rawMerchant) {
+  if (
+    !receipt.merchant &&
+    !receipt.rawMerchant
+  ) {
     error(
       issues,
       'merchant',
@@ -120,7 +173,9 @@ function validateConfidence(
 ): void {
   if (
     typeof receipt.confidence !== 'number' ||
-    !Number.isFinite(receipt.confidence) ||
+    !Number.isFinite(
+      receipt.confidence
+    ) ||
     receipt.confidence < 0 ||
     receipt.confidence > 1
   ) {
@@ -134,7 +189,10 @@ function validateConfidence(
     return;
   }
 
-  if (receipt.confidence < MIN_ACCEPTABLE_CONFIDENCE) {
+  if (
+    receipt.confidence <
+    MIN_ACCEPTABLE_CONFIDENCE
+  ) {
     error(
       issues,
       'confidence',
@@ -145,7 +203,10 @@ function validateConfidence(
     return;
   }
 
-  if (receipt.confidence < AUTO_SAVE_CONFIDENCE) {
+  if (
+    receipt.confidence <
+    AUTO_SAVE_CONFIDENCE
+  ) {
     warning(
       issues,
       'confidence',
@@ -163,9 +224,10 @@ function validateDate(
     return;
   }
 
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})$/
-  );
+  const match =
+    value.match(
+      /^(\d{4})-(\d{2})-(\d{2})$/
+    );
 
   if (!match) {
     error(
@@ -178,18 +240,31 @@ function validateDate(
     return;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  const year =
+    Number(match[1]);
 
-  const date = new Date(
-    Date.UTC(year, month - 1, day)
-  );
+  const month =
+    Number(match[2]);
+
+  const day =
+    Number(match[3]);
+
+  const date =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
 
   const valid =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+    date.getUTCFullYear() ===
+      year &&
+    date.getUTCMonth() ===
+      month - 1 &&
+    date.getUTCDate() ===
+      day;
 
   if (!valid) {
     error(
@@ -202,10 +277,17 @@ function validateDate(
     return;
   }
 
-  const tomorrow = new Date();
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tomorrow =
+    new Date();
 
-  if (date.getTime() > tomorrow.getTime()) {
+  tomorrow.setUTCDate(
+    tomorrow.getUTCDate() + 1
+  );
+
+  if (
+    date.getTime() >
+    tomorrow.getTime()
+  ) {
     warning(
       issues,
       'purchaseDate',
@@ -225,7 +307,11 @@ function validateMoneyField(
     return;
   }
 
-  if (!/^-?\d+(?:\.\d{2})$/.test(value)) {
+  if (
+    !/^-?\d+(?:\.\d{2})$/.test(
+      value
+    )
+  ) {
     error(
       issues,
       field,
@@ -236,9 +322,12 @@ function validateMoneyField(
     return;
   }
 
-  const amount = Number(value);
+  const amount =
+    Number(value);
 
-  if (!Number.isFinite(amount)) {
+  if (
+    !Number.isFinite(amount)
+  ) {
     error(
       issues,
       field,
@@ -249,7 +338,10 @@ function validateMoneyField(
     return;
   }
 
-  if (mustBePositive && amount <= 0) {
+  if (
+    mustBePositive &&
+    amount <= 0
+  ) {
     error(
       issues,
       field,
@@ -265,7 +357,9 @@ function validateCard(
 ): void {
   if (
     receipt.cardLast4 &&
-    !/^\d{4}$/.test(receipt.cardLast4)
+    !/^\d{4}$/.test(
+      receipt.cardLast4
+    )
   ) {
     warning(
       issues,
@@ -291,10 +385,17 @@ function validateItems(
     return;
   }
 
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
+  for (
+    let index = 0;
+    index < items.length;
+    index++
+  ) {
+    const item =
+      items[index];
 
-    if (!item.name?.trim()) {
+    if (
+      !item.name?.trim()
+    ) {
       warning(
         issues,
         `items.${index}.name`,
@@ -306,8 +407,11 @@ function validateItems(
     if (
       item.quantity !== null &&
       (
-        typeof item.quantity !== 'number' ||
-        !Number.isFinite(item.quantity) ||
+        typeof item.quantity !==
+          'number' ||
+        !Number.isFinite(
+          item.quantity
+        ) ||
         item.quantity <= 0
       )
     ) {
@@ -348,7 +452,11 @@ function validateOptionalItemMoney(
     return;
   }
 
-  if (!/^-?\d+(?:\.\d{2})$/.test(value)) {
+  if (
+    !/^-?\d+(?:\.\d{2})$/.test(
+      value
+    )
+  ) {
     warning(
       issues,
       field,
@@ -367,20 +475,31 @@ function validateArithmetic(
     receipt.subtotalBeforeVat &&
     receipt.vat
   ) {
-    const total = Number(receipt.total);
-    const subtotal = Number(receipt.subtotalBeforeVat);
-    const vat = Number(receipt.vat);
+    const total =
+      Number(receipt.total);
+
+    const subtotal =
+      Number(
+        receipt.subtotalBeforeVat
+      );
+
+    const vat =
+      Number(receipt.vat);
 
     if (
       Number.isFinite(total) &&
       Number.isFinite(subtotal) &&
       Number.isFinite(vat)
     ) {
-      const difference = Math.abs(
-        total - (subtotal + vat)
-      );
+      const difference =
+        Math.abs(
+          total -
+          (subtotal + vat)
+        );
 
-      if (difference > 0.05) {
+      if (
+        difference > 0.05
+      ) {
         warning(
           issues,
           'total',
@@ -390,6 +509,20 @@ function validateArithmetic(
       }
     }
   }
+}
+
+function info(
+  issues: ReceiptValidationIssue[],
+  field: string,
+  code: string,
+  message: string
+): void {
+  issues.push({
+    field,
+    severity: 'info',
+    code,
+    message
+  });
 }
 
 function error(

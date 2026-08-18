@@ -9,93 +9,176 @@ import {
 const loadFixture = async () =>
   JSON.parse(
     await readFile(
-      new URL('./fixtures/ai-receipt-ksp.json', import.meta.url),
+      new URL(
+        './fixtures/ai-receipt-ksp.json',
+        import.meta.url
+      ),
       'utf8'
     )
   );
 
-test('valid AI receipt with AI warning requires review', async () => {
-  const receipt = await loadFixture();
+test(
+  'descriptive AI note does not block automatic save',
+  async () => {
+    const receipt =
+      await loadFixture();
 
-  const validation = validateReceiptExtraction(receipt);
+    const validation =
+      validateReceiptExtraction(
+        receipt
+      );
 
-  assert.equal(validation.valid, true);
-  assert.equal(validation.safeForAutomaticSave, false);
-  assert.equal(validation.requiresReview, true);
-  assert.equal(validation.confidence, 0.94);
+    assert.equal(
+      validation.valid,
+      true
+    );
 
-  assert.ok(
-    validation.issues.some(
-      issue =>
-        issue.code === 'ai_warning' &&
-        issue.severity === 'warning'
-    )
-  );
-});
+    assert.equal(
+      validation.safeForAutomaticSave,
+      true
+    );
 
-test('high-confidence clean receipt can be automatically saved', async () => {
-  const receipt = await loadFixture();
+    assert.equal(
+      validation.requiresReview,
+      false
+    );
 
-  const cleanReceipt = {
-    ...receipt,
-    warnings: [],
-    confidence: 0.96
-  };
+    assert.equal(
+      validation.confidence,
+      0.94
+    );
 
-  const validation =
-    validateReceiptExtraction(cleanReceipt);
+    assert.ok(
+      validation.issues.some(
+        issue =>
+          issue.code === 'ai_note' &&
+          issue.severity === 'info'
+      )
+    );
+  }
+);
 
-  assert.equal(validation.valid, true);
-  assert.equal(validation.safeForAutomaticSave, true);
-  assert.equal(validation.requiresReview, false);
-  assert.equal(validation.issues.length, 0);
-});
+test(
+  'high-confidence clean receipt can be automatically saved',
+  async () => {
+    const receipt =
+      await loadFixture();
 
-test('missing financial core data blocks automatic save', async () => {
-  const receipt = await loadFixture();
+    const cleanReceipt = {
+      ...receipt,
+      warnings: [],
+      confidence: 0.96
+    };
 
-  const incompleteReceipt = {
-    ...receipt,
-    total: null,
-    confidence: 0.98,
-    warnings: []
-  };
+    const validation =
+      validateReceiptExtraction(
+        cleanReceipt
+      );
 
-  const validation =
-    validateReceiptExtraction(incompleteReceipt);
+    assert.equal(
+      validation.valid,
+      true
+    );
 
-  assert.equal(validation.valid, false);
-  assert.equal(validation.safeForAutomaticSave, false);
-  assert.equal(validation.requiresReview, true);
+    assert.equal(
+      validation.safeForAutomaticSave,
+      true
+    );
 
-  assert.ok(
-    validation.issues.some(
-      issue =>
-        issue.code === 'missing_total' &&
-        issue.severity === 'error'
-    )
-  );
-});
+    assert.equal(
+      validation.requiresReview,
+      false
+    );
 
-test('low AI confidence requires review', async () => {
-  const receipt = await loadFixture();
+    assert.equal(
+      validation.issues.length,
+      0
+    );
+  }
+);
 
-  const uncertainReceipt = {
-    ...receipt,
-    confidence: 0.82,
-    warnings: []
-  };
+test(
+  'missing financial core data blocks automatic save',
+  async () => {
+    const receipt =
+      await loadFixture();
 
-  const validation =
-    validateReceiptExtraction(uncertainReceipt);
+    const incompleteReceipt = {
+      ...receipt,
+      total: null,
+      confidence: 0.98,
+      warnings: []
+    };
 
-  assert.equal(validation.valid, true);
-  assert.equal(validation.safeForAutomaticSave, false);
-  assert.equal(validation.requiresReview, true);
+    const validation =
+      validateReceiptExtraction(
+        incompleteReceipt
+      );
 
-  assert.ok(
-    validation.issues.some(
-      issue => issue.code === 'review_confidence'
-    )
-  );
-});
+    assert.equal(
+      validation.valid,
+      false
+    );
+
+    assert.equal(
+      validation.safeForAutomaticSave,
+      false
+    );
+
+    assert.equal(
+      validation.requiresReview,
+      true
+    );
+
+    assert.ok(
+      validation.issues.some(
+        issue =>
+          issue.code === 'missing_total' &&
+          issue.severity === 'error'
+      )
+    );
+  }
+);
+
+test(
+  'low AI confidence requires review',
+  async () => {
+    const receipt =
+      await loadFixture();
+
+    const uncertainReceipt = {
+      ...receipt,
+      confidence: 0.82,
+      warnings: []
+    };
+
+    const validation =
+      validateReceiptExtraction(
+        uncertainReceipt
+      );
+
+    assert.equal(
+      validation.valid,
+      true
+    );
+
+    assert.equal(
+      validation.safeForAutomaticSave,
+      false
+    );
+
+    assert.equal(
+      validation.requiresReview,
+      true
+    );
+
+    assert.ok(
+      validation.issues.some(
+        issue =>
+          issue.code ===
+            'review_confidence' &&
+          issue.severity === 'warning'
+      )
+    );
+  }
+);
