@@ -14,7 +14,10 @@ const uniqueMessages = history => [
     (history || [])
       .flatMap(item =>
         (item.messagesAdded || [])
-          .map(entry => entry.message?.id)
+          .map(
+            entry =>
+              entry.message?.id
+          )
       )
       .filter(Boolean)
   )
@@ -25,7 +28,8 @@ export class GmailSyncService {
     repository,
     gmail,
     clock = () => new Date(),
-    receiptProcessor = null
+    receiptProcessor = null,
+    receiptIngestionService = null
   }) {
     this.repository = repository;
     this.gmail = gmail;
@@ -36,6 +40,9 @@ export class GmailSyncService {
       new GmailReceiptProcessor({
         gmail
       });
+
+    this.receiptIngestionService =
+      receiptIngestionService;
   }
 
   async connect({
@@ -43,104 +50,141 @@ export class GmailSyncService {
     tokens,
     email = null
   }) {
-    return this.repository.update(async state => {
-      const connection = {
-        id: connectionId,
-        email,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        accessTokenExpiresAt:
-          Date.now() +
-          Number(tokens.expires_in || 3600) * 1000,
-        status: 'connecting',
-        lastSuccessfulSync: null
-      };
+    return this.repository.update(
+      async state => {
+        const connection = {
+          id: connectionId,
+          email,
 
-      const {
-        active,
-        response
-      } = await this.gmail.watch(connection);
+          accessToken:
+            tokens.access_token,
 
-      state.connections[connectionId] = {
-        ...active,
-        historyId: response.historyId,
-        watchExpiration:
-          Number(response.expiration),
-        status: 'active',
-        lastError: null
-      };
+          refreshToken:
+            tokens.refresh_token,
 
-      return publicConnection(
-        state.connections[connectionId]
-      );
-    });
-  }
+          accessTokenExpiresAt:
+            Date.now() +
+            Number(
+              tokens.expires_in ||
+              3600
+            ) *
+              1000,
 
-  async renewWatches() {
-    return this.repository.update(async state => {
-      const results = [];
+          status: 'connecting',
 
-      for (
-        const connection of
-        Object.values(state.connections)
-      ) {
-        if (
-          connection.status ===
-          'disconnected'
-        ) {
-          continue;
-        }
+          lastSuccessfulSync:
+            null
+        };
 
-        try {
-          const {
-            active,
-            response
-          } = await this.gmail.watch(
+        const {
+          active,
+          response
+        } =
+          await this.gmail.watch(
             connection
           );
 
-          Object.assign(
-            connection,
-            active,
-            {
-              historyId:
-                connection.historyId ||
-                response.historyId,
-              watchExpiration:
-                Number(
-                  response.expiration
-                ),
-              status: 'active',
-              lastError: null
-            }
-          );
+        state.connections[
+          connectionId
+        ] = {
+          ...active,
 
-          results.push({
-            id: connection.id,
-            ok: true
-          });
-        } catch (error) {
-          connection.status =
-            error.code ===
-            'oauth_revoked'
-              ? 'reconnect_required'
-              : 'watch_failed';
+          historyId:
+            response.historyId,
 
-          connection.lastError =
-            error.code ||
-            'watch_failed';
+          watchExpiration:
+            Number(
+              response.expiration
+            ),
 
-          results.push({
-            id: connection.id,
-            ok: false,
-            error:
-              connection.lastError
-          });
-        }
+          status: 'active',
+          lastError: null
+        };
+
+        return publicConnection(
+          state.connections[
+            connectionId
+          ]
+        );
       }
+    );
+  }
 
-      return results;
-    });
+  async renewWatches() {
+    return this.repository.update(
+      async state => {
+        const results = [];
+
+        for (
+          const connection of
+          Object.values(
+            state.connections
+          )
+        ) {
+          if (
+            connection.status ===
+            'disconnected'
+          ) {
+            continue;
+          }
+
+          try {
+            const {
+              active,
+              response
+            } =
+              await this.gmail.watch(
+                connection
+              );
+
+            Object.assign(
+              connection,
+              active,
+              {
+                historyId:
+                  connection
+                    .historyId ||
+                  response
+                    .historyId,
+
+                watchExpiration:
+                  Number(
+                    response
+                      .expiration
+                  ),
+
+                status: 'active',
+                lastError: null
+              }
+            );
+
+            results.push({
+              id: connection.id,
+              ok: true
+            });
+          } catch (error) {
+            connection.status =
+              error.code ===
+              'oauth_revoked'
+                ? 'reconnect_required'
+                : 'watch_failed';
+
+            connection.lastError =
+              error.code ||
+              'watch_failed';
+
+            results.push({
+              id: connection.id,
+              ok: false,
+              error:
+                connection.lastError
+            });
+          }
+        }
+
+        return results;
+      }
+    );
   }
 
   async processNotification({
@@ -183,6 +227,7 @@ export class GmailSyncService {
         let ids = [];
         let nextHistoryId =
           String(historyId);
+
         let recovered = false;
 
         try {
@@ -197,15 +242,20 @@ export class GmailSyncService {
             result.active
           );
 
-          ids = uniqueMessages(
-            result.response.history
-          );
+          ids =
+            uniqueMessages(
+              result.response
+                .history
+            );
 
           nextHistoryId =
-            result.response.historyId ||
+            result.response
+              .historyId ||
             nextHistoryId;
         } catch (error) {
-          if (error.status !== 404) {
+          if (
+            error.status !== 404
+          ) {
             throw error;
           }
 
@@ -221,8 +271,8 @@ export class GmailSyncService {
           );
 
           ids = (
-            result.response.messages ||
-            []
+            result.response
+              .messages || []
           ).map(
             item => item.id
           );
@@ -231,8 +281,15 @@ export class GmailSyncService {
         }
 
         const staged = [];
-        let automaticallyProcessed = 0;
-        let reviewRequired = 0;
+
+        let automaticallyProcessed =
+          0;
+
+        let automaticallyLinked =
+          0;
+
+        let reviewRequired =
+          0;
 
         for (const id of ids) {
           if (
@@ -244,11 +301,12 @@ export class GmailSyncService {
           }
 
           const metadataResult =
-            await this.gmail.getMessage(
-              connection,
-              id,
-              'metadata'
-            );
+            await this.gmail
+              .getMessage(
+                connection,
+                id,
+                'metadata'
+              );
 
           Object.assign(
             connection,
@@ -256,7 +314,8 @@ export class GmailSyncService {
           );
 
           const metadata =
-            metadataResult.response;
+            metadataResult
+              .response;
 
           if (
             !isReceiptCandidate(
@@ -268,6 +327,7 @@ export class GmailSyncService {
             ] = {
               status:
                 'not_relevant',
+
               processedAt:
                 this.clock()
                   .toISOString()
@@ -277,11 +337,12 @@ export class GmailSyncService {
           }
 
           const fullResult =
-            await this.gmail.getMessage(
-              connection,
-              id,
-              'full'
-            );
+            await this.gmail
+              .getMessage(
+                connection,
+                id,
+                'full'
+              );
 
           Object.assign(
             connection,
@@ -292,17 +353,17 @@ export class GmailSyncService {
             ...minimalEvidence(
               fullResult.response
             ),
+
             connectionId:
               connection.id
           };
 
           /*
-           * Staging is written BEFORE automatic
-           * processing.
+           * Always stage first.
            *
-           * This guarantees that a receipt is
-           * never lost if PDF extraction, OCR,
-           * OpenAI, or validation fails.
+           * Even if AI, PDF extraction,
+           * matching, or finance storage
+           * fails, the receipt is not lost.
            */
           state.staging[id] =
             evidence;
@@ -311,6 +372,7 @@ export class GmailSyncService {
             id
           ] = {
             status: 'staged',
+
             processedAt:
               this.clock()
                 .toISOString()
@@ -324,15 +386,17 @@ export class GmailSyncService {
               `${id}:${attachment.id}`;
 
             if (
-              !state.processedDocuments[
-                fingerprint
-              ]
+              !state
+                .processedDocuments[
+                  fingerprint
+                ]
             ) {
               state.processedDocuments[
                 fingerprint
               ] = {
                 status:
                   'pending_handoff',
+
                 messageId: id
               };
             }
@@ -350,73 +414,117 @@ export class GmailSyncService {
                 .digest('hex')}`;
 
             if (
-              !state.processedDocuments[
-                fingerprint
-              ]
+              !state
+                .processedDocuments[
+                  fingerprint
+                ]
             ) {
               state.processedDocuments[
                 fingerprint
               ] = {
                 status:
                   'pending_handoff',
+
                 messageId: id
               };
             }
           }
 
-          /*
-           * Try automatic PDF processing.
-           *
-           * Images and linked documents remain
-           * available in staging until their
-           * dedicated processing flow is added.
-           */
           try {
             const processing =
-              await this.receiptProcessor
+              await this
+                .receiptProcessor
                 .process(
                   connection,
                   evidence
                 );
 
+            let ingestion = null;
+
+            /*
+             * Only a receipt that already passed
+             * AI extraction + deterministic
+             * validation is eligible for matching.
+             */
+            if (
+              processing.status ===
+                'processed' &&
+              this
+                .receiptIngestionService
+            ) {
+              ingestion =
+                await this
+                  .receiptIngestionService
+                  .ingest({
+                    connection,
+                    evidence,
+                    processing
+                  });
+            }
+
             state.staging[id] = {
               ...evidence,
+
               automaticProcessing:
-                processing
+                processing,
+
+              financialIngestion:
+                ingestion
             };
 
             if (
-              processing.status ===
-              'processed'
+              ingestion?.status ===
+              'linked_automatically'
             ) {
-              automaticallyProcessed += 1;
+              automaticallyProcessed +=
+                1;
+
+              automaticallyLinked +=
+                1;
 
               state.processedMessages[
                 id
               ] = {
                 status:
-                  'receipt_processed',
+                  'linked_automatically',
+
                 processedAt:
                   this.clock()
-                    .toISOString()
+                    .toISOString(),
+
+                transactionId:
+                  ingestion
+                    .transactionId
               };
 
-              const fingerprint =
-                `${id}:${processing.attachmentId}`;
+              if (
+                processing
+                  .attachmentId
+              ) {
+                const fingerprint =
+                  `${id}:${processing.attachmentId}`;
 
-              state.processedDocuments[
-                fingerprint
-              ] = {
-                status:
-                  'receipt_processed',
-                messageId: id,
-                processedAt:
-                  this.clock()
-                    .toISOString()
-              };
+                state
+                  .processedDocuments[
+                    fingerprint
+                  ] = {
+                    status:
+                      'linked_automatically',
+
+                    messageId: id,
+
+                    transactionId:
+                      ingestion
+                        .transactionId,
+
+                    processedAt:
+                      this.clock()
+                        .toISOString()
+                  };
+              }
             } else if (
-              processing.status ===
-              'review_required'
+              ingestion?.status ===
+                'review_required'
             ) {
               reviewRequired += 1;
 
@@ -425,51 +533,147 @@ export class GmailSyncService {
               ] = {
                 status:
                   'review_required',
+
                 processedAt:
                   this.clock()
                     .toISOString(),
+
+                reason:
+                  ingestion.reason
+              };
+
+              if (
+                processing
+                  .attachmentId
+              ) {
+                const fingerprint =
+                  `${id}:${processing.attachmentId}`;
+
+                state
+                  .processedDocuments[
+                    fingerprint
+                  ] = {
+                    status:
+                      'review_required',
+
+                    messageId: id,
+
+                    processedAt:
+                      this.clock()
+                        .toISOString(),
+
+                    reason:
+                      ingestion.reason
+                  };
+              }
+            } else if (
+              processing.status ===
+                'review_required'
+            ) {
+              reviewRequired += 1;
+
+              state.processedMessages[
+                id
+              ] = {
+                status:
+                  'review_required',
+
+                processedAt:
+                  this.clock()
+                    .toISOString(),
+
                 reason:
                   processing.reason
               };
 
               if (
-                processing.attachmentId
+                processing
+                  .attachmentId
               ) {
                 const fingerprint =
                   `${id}:${processing.attachmentId}`;
 
-                state.processedDocuments[
-                  fingerprint
-                ] = {
-                  status:
-                    'review_required',
-                  messageId: id,
-                  processedAt:
-                    this.clock()
-                      .toISOString(),
-                  reason:
-                    processing.reason
-                };
+                state
+                  .processedDocuments[
+                    fingerprint
+                  ] = {
+                    status:
+                      'review_required',
+
+                    messageId: id,
+
+                    processedAt:
+                      this.clock()
+                        .toISOString(),
+
+                    reason:
+                      processing.reason
+                  };
+              }
+            } else if (
+              processing.status ===
+                'processed' &&
+              !this
+                .receiptIngestionService
+            ) {
+              /*
+               * Backward-compatible behavior
+               * for tests or deployments where
+               * finance ingestion is intentionally
+               * not configured.
+               */
+              automaticallyProcessed +=
+                1;
+
+              state.processedMessages[
+                id
+              ] = {
+                status:
+                  'receipt_processed',
+
+                processedAt:
+                  this.clock()
+                    .toISOString()
+              };
+
+              if (
+                processing
+                  .attachmentId
+              ) {
+                const fingerprint =
+                  `${id}:${processing.attachmentId}`;
+
+                state
+                  .processedDocuments[
+                    fingerprint
+                  ] = {
+                    status:
+                      'receipt_processed',
+
+                    messageId: id,
+
+                    processedAt:
+                      this.clock()
+                        .toISOString()
+                  };
               }
             }
           } catch (error) {
-            /*
-             * Automatic processing must NEVER
-             * break Gmail synchronization.
-             *
-             * Keep the receipt in staging and
-             * mark it for review.
-             */
             reviewRequired += 1;
 
             state.staging[id] = {
               ...evidence,
+
               automaticProcessing: {
                 status:
                   'review_required',
+
                 reason:
                   'automatic_processing_failed'
-              }
+              },
+
+              financialIngestion:
+                null
             };
 
             state.processedMessages[
@@ -477,9 +681,11 @@ export class GmailSyncService {
             ] = {
               status:
                 'review_required',
+
               processedAt:
                 this.clock()
                   .toISOString(),
+
               reason:
                 'automatic_processing_failed'
             };
@@ -488,10 +694,13 @@ export class GmailSyncService {
               JSON.stringify({
                 event:
                   'gmail_receipt_processing_failed',
+
                 messageId: id,
+
                 code:
                   error?.code ||
                   'receipt_processing_failed',
+
                 message:
                   error?.message ||
                   'Unknown receipt processing error'
@@ -510,7 +719,8 @@ export class GmailSyncService {
         connection.status =
           'active';
 
-        connection.lastSuccessfulSync =
+        connection
+          .lastSuccessfulSync =
           this.clock()
             .toISOString();
 
@@ -523,16 +733,23 @@ export class GmailSyncService {
           processedAt:
             this.clock()
               .toISOString(),
+
           historyId:
             String(historyId)
         };
 
         return {
           status: 'processed',
+
           stagedCount:
             staged.length,
+
           automaticallyProcessed,
+
+          automaticallyLinked,
+
           reviewRequired,
+
           recovered
         };
       }
@@ -580,9 +797,8 @@ export class GmailSyncService {
 
         try {
           if (token) {
-            await this.gmail.revoke(
-              token
-            );
+            await this.gmail
+              .revoke(token);
           }
         } finally {
           delete state.connections[
@@ -602,9 +818,8 @@ export class GmailSyncService {
               item.connectionId ===
                 connectionId
             ) {
-              delete state.staging[
-                id
-              ];
+              delete state
+                .staging[id];
             }
           }
         }
@@ -619,18 +834,29 @@ export class GmailSyncService {
 
 const publicConnection =
   connection => ({
-    id: connection.id,
-    email: connection.email,
-    status: connection.status,
+    id:
+      connection.id,
+
+    email:
+      connection.email,
+
+    status:
+      connection.status,
+
     historyId:
       connection.historyId ||
       null,
+
     watchExpiration:
-      connection.watchExpiration ||
+      connection
+        .watchExpiration ||
       null,
+
     lastSuccessfulSync:
-      connection.lastSuccessfulSync ||
+      connection
+        .lastSuccessfulSync ||
       null,
+
     lastError:
       connection.lastError ||
       null

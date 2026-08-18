@@ -286,6 +286,7 @@ test(
       status: 'processed',
       stagedCount: 1,
       automaticallyProcessed: 0,
+      automaticallyLinked: 0,
       reviewRequired: 0,
       recovered: false
     });
