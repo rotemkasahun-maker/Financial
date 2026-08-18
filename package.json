@@ -8,5 +8,9 @@
     "backend:dev": "node --experimental-strip-types backend/server.ts",
     "build": "node scripts/validate-build.js",
     "test": "node --test"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.2.108",
+    "tesseract.js": "^7.0.0"
   }
 }
