@@ -43,3 +43,77 @@ test('POST /api/ingestion/evidence rejects invalid token', async () => {
     server.close();
   }
 });
+
+test('POST /api/ingestion/evidence returns 503 if finance not configured', async () => {
+  const configWithoutFinance = { ...mockConfig, stateEncryptionKey: null };
+  const server = createBackend({ config: configWithoutFinance });
+  server.listen(8082);
+
+  try {
+    const response = await fetch('http://127.0.0.1:8082/api/ingestion/evidence', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer valid-token',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ externalSourceId: 'id' })
+    });
+    assert.equal(response.status, 503);
+    const result = await response.json();
+    assert.equal(result.error, 'finance_not_configured');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /api/ingestion/evidence succeeds when finance configured', async () => {
+  const state = {
+    processedEvidence: {},
+    staging: {}
+  };
+
+  const repository = {
+    async read() {
+      return state;
+    },
+    async update(updater) {
+      return updater(state);
+    }
+  };
+
+  const financeDataService = {};
+
+  const server = createBackend({
+    config: mockConfig,
+    repository,
+    financeDataService
+  });
+
+  server.listen(8082);
+
+  try {
+    const response = await fetch(
+      'http://127.0.0.1:8082/api/ingestion/evidence',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer valid-token',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          externalSourceId: 'test-id-' + Date.now(),
+          sourceType: 'sms',
+          candidateType: 'AMBIGUOUS',
+          originalSmsTimestamp: new Date().toISOString()
+        })
+      }
+    );
+
+    assert.equal(response.status, 200);
+
+    const result = await response.json();
+    assert.equal(result.status, 'review_required');
+  } finally {
+    server.close();
+  }
+});

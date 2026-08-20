@@ -249,6 +249,14 @@ export function createBackend({
             );
           }
 
+          if (!financeDataService) {
+            return json(
+              res,
+              503,
+              { error: 'finance_not_configured' }
+            );
+          }
+
           const payload = await body(req);
           const result = await ingestionService.processEvidence(payload);
 
