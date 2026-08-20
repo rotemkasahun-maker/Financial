@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.familyfinance.app.evidence.FinancialEvidencePersistence
+import com.familyfinance.app.notification.NotificationAccessCard
 import com.familyfinance.app.sms.FinancialEvidenceSyncClient
 import com.familyfinance.app.sms.FinancialEvidenceSyncService
 import com.familyfinance.app.sms.FinancialSyncConfig
@@ -82,7 +84,7 @@ fun SmsTestScreen() {
     }
 
     var pendingCount by remember {
-        mutableStateOf(SmsPersistence.getQueue(context).size)
+        mutableStateOf(FinancialEvidencePersistence.getQueue(context).size)
     }
 
     val coroutineScope = rememberCoroutineScope()
@@ -164,6 +166,8 @@ fun SmsTestScreen() {
                 }
             }
 
+            NotificationAccessCard()
+
             OutlinedTextField(
                 value = sender,
                 onValueChange = { sender = it },
@@ -200,7 +204,7 @@ fun SmsTestScreen() {
 
             // Simple polling/refresh for the manual test screen
             Button(
-                onClick = { pendingCount = SmsPersistence.getQueue(context).size },
+                onClick = { pendingCount = FinancialEvidencePersistence.getQueue(context).size },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Refresh Queue Count")
@@ -246,10 +250,10 @@ fun SmsTestScreen() {
                                 val service = FinancialEvidenceSyncService(client)
 
                                 val syncResult = withContext(Dispatchers.IO) {
-                                    service.syncSmsQueue(context)
+                                    service.syncEvidenceQueue(context)
                                 }
 
-                                pendingCount = SmsPersistence.getQueue(context).size
+                                pendingCount = FinancialEvidencePersistence.getQueue(context).size
 
                                 syncStatus = when {
                                     syncResult.pendingCount == 0 -> "Empty queue. Nothing to sync."

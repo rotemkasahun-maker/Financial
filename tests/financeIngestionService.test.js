@@ -4,10 +4,7 @@ import { FinanceIngestionService } from '../backend/financeIngestionService.ts';
 
 class MockRepository {
   constructor(state = {}) { this.state = state; }
-  async update(fn) {
-    const result = await fn(this.state);
-    return result;
-  }
+  async update(fn) { return fn(this.state); }
 }
 
 class MockFinanceDataService {
@@ -16,15 +13,15 @@ class MockFinanceDataService {
     this.links = [];
   }
   async getTransactions() { return this.transactions; }
-  async linkEvidence(id, evidence) {
-    this.links.push({ id, evidence });
-  }
+  async linkEvidence(id, evidence) { this.links.push({ id, evidence }); }
 }
 
 test('FinanceIngestionService tracks idempotency', async () => {
   const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
-  const financeData = new MockFinanceDataService();
-  const service = new FinanceIngestionService({ dataService: financeData, syncRepository: syncRepo });
+  const service = new FinanceIngestionService({
+    dataService: new MockFinanceDataService(),
+    syncRepository: syncRepo
+  });
 
   const evidence = {
     externalSourceId: 'id-1',
@@ -33,25 +30,29 @@ test('FinanceIngestionService tracks idempotency', async () => {
     candidateType: 'AMBIGUOUS'
   };
 
-  const result1 = await service.processEvidence(evidence);
-  assert.equal(result1.status, 'review_required');
-
-  const result2 = await service.processEvidence(evidence);
-  assert.equal(result2.status, 'already_processed');
+  assert.equal((await service.processEvidence(evidence)).status, 'review_required');
+  assert.equal((await service.processEvidence(evidence)).status, 'already_processed');
 });
 
 test('FinanceIngestionService links high-confidence matches', async () => {
   const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
-  const transactions = [{ id: 'tx-1', date: '2026-08-20', merchant: 'Test Merchant', amount: 100, financialType: 'expense' }];
-  const financeData = new MockFinanceDataService(transactions);
-  const service = new FinanceIngestionService({ dataService: financeData, syncRepository: syncRepo });
+  const transactions = [{
+    id: 'tx-1',
+    date: '2026-08-20',
+    merchant: 'Test Merchant',
+    amount: 100,
+    financialType: 'expense'
+  }];
 
-  // Mock state for handleTransaction to find the transaction
-  syncRepo.state.transactions = transactions;
+  const service = new FinanceIngestionService({
+    dataService: new MockFinanceDataService(transactions),
+    syncRepository: syncRepo
+  });
 
-  const evidence = {
+  const result = await service.processEvidence({
     externalSourceId: 'id-2',
-    sender: 'Bank',
+    sourceType: 'notification',
+    sender: 'Google Wallet',
     originalSmsTimestamp: '2026-08-20T10:00:00Z',
     candidateType: 'TRANSACTION',
     normalized: {
@@ -59,9 +60,28 @@ test('FinanceIngestionService links high-confidence matches', async () => {
       date: '2026-08-20',
       amount: 100
     }
-  };
+  });
 
-  const result = await service.processEvidence(evidence);
   assert.equal(result.status, 'linked_automatically');
   assert.equal(result.transactionId, 'tx-1');
+});
+
+test('partial TRANSACTION evidence is staged safely', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const service = new FinanceIngestionService({
+    dataService: new MockFinanceDataService(),
+    syncRepository: syncRepo
+  });
+
+  const result = await service.processEvidence({
+    externalSourceId: 'partial-1',
+    sourceType: 'sms',
+    sender: 'Bank',
+    originalSmsTimestamp: 1777000000000,
+    candidateType: 'TRANSACTION',
+    normalized: { amount: 117.4, currency: 'ILS' }
+  });
+
+  assert.equal(result.status, 'review_required');
+  assert.equal(syncRepo.state.staging['partial-1'].status, 'review_required');
 });

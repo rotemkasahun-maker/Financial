@@ -15,10 +15,7 @@ class SmsPersistenceTest {
 
     @Before
     fun setup() {
-        // Clear storage before each test
-        context.getSharedPreferences("sms_idempotency_prefs", android.content.Context.MODE_PRIVATE)
-            .edit().clear().commit()
-        File(context.filesDir, "pending_sms_evidence.json").delete()
+        SmsPersistence.resetLocalState(context)
     }
 
     @Test
