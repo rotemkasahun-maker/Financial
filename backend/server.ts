@@ -37,6 +37,10 @@ import {
 } from './receiptIngestionService.ts';
 
 import {
+  FinanceIngestionService
+} from './financeIngestionService.ts';
+
+import {
   ImportPipeline
 } from '../src/shared/importPipeline.js';
 
@@ -185,6 +189,12 @@ export function createBackend({
       repository
     });
 
+  const ingestionService =
+    new FinanceIngestionService({
+      dataService: financeDataService,
+      syncRepository: repository
+    });
+
   return createServer(
     async (req, res) => {
       try {
@@ -220,6 +230,29 @@ export function createBackend({
                 )
             }
           );
+        }
+
+        if (
+          req.method === 'POST' &&
+          url.pathname ===
+            '/api/ingestion/evidence'
+        ) {
+          if (
+            config.connectorSharedToken &&
+            req.headers.authorization !==
+              `Bearer ${config.connectorSharedToken}`
+          ) {
+            return json(
+              res,
+              401,
+              { error: 'unauthorized' }
+            );
+          }
+
+          const payload = await body(req);
+          const result = await ingestionService.processEvidence(payload);
+
+          return json(res, 200, result);
         }
 
         /*

@@ -2,7 +2,7 @@ import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {decryptJson,encryptJson} from './crypto.ts';
 
-export const emptyState=()=>({version:1,connections:{},processedMessages:{},processedDocuments:{},deliveries:{},staging:{}});
+export const emptyState=()=>({version:1,connections:{},processedMessages:{},processedDocuments:{},processedEvidence:{},deliveries:{},staging:{}});
 export class GmailStateRepository {
   constructor({blobStore,encryptionKey}){this.blobStore=blobStore;this.encryptionKey=encryptionKey}
   async read(){const bytes=await this.blobStore.read();return bytes?decryptJson(bytes,this.encryptionKey):emptyState()}

@@ -64,6 +64,38 @@ export class BackendFinanceDataService {
     );
   }
 
+  async linkEvidence(
+    transactionId: string,
+    evidence: any
+  ) {
+    return this.repository.update(
+      async state => {
+        const transaction =
+          state.transactions.find(
+            item => item.id === transactionId
+          );
+
+        if (!transaction) {
+          throw new Error('Transaction not found');
+        }
+
+        const evidenceMetadata = {
+          sourceType: evidence.sourceType || 'android_sms',
+          externalSourceId: evidence.externalSourceId,
+          importedAt: new Date().toISOString(),
+          metadata: evidence.metadata || {}
+        };
+
+        transaction.sourceRepresentations = [
+          ...(transaction.sourceRepresentations || []),
+          evidenceMetadata
+        ];
+
+        return structuredClone(transaction);
+      }
+    );
+  }
+
   async saveReceipt(
     receipt: BackendReceipt,
     linkedTransactionId: string | null = null

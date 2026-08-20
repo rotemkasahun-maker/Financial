@@ -80,6 +80,11 @@ export function loadConfig(env = process.env) {
         'PUBSUB_PUSH_SERVICE_ACCOUNT'
       ) || null,
 
+    connectorSharedToken:
+      get(
+        'CONNECTOR_SHARED_TOKEN'
+      ) || null,
+
     schedulerToken:
       get(
         'SCHEDULER_SHARED_TOKEN'

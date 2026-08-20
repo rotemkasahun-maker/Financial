@@ -47,3 +47,10 @@ local-snapshots/
 .local/
 /*.csv
 /*.xlsx
+
+# Local development/test artifacts
+staging.json
+*-test.pdf
+*-test.txt
+syntax-error.txt
+*.traineddata
