@@ -49,7 +49,10 @@ const json = (res, status, value) => {
     'Content-Type':
       'application/json; charset=utf-8',
     'Cache-Control':
-      'no-store'
+      'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
   });
 
   res.end(
@@ -203,6 +206,15 @@ export function createBackend({
             req.url,
             config.publicBaseUrl
           );
+
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+          });
+          return res.end();
+        }
 
         if (
           req.method === 'GET' &&

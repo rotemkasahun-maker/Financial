@@ -229,7 +229,7 @@ fun SmsTestScreen() {
                     )
 
                     Text(
-                        text = "יוזם סנכרון ידני של תור ה-SMS הממתינים לשרת המקומי (10.0.2.2)."
+                        text = "יוזם סנכרון ידני של תור ה-SMS הממתינים לשרת המקומי."
                     )
 
                     Text(
@@ -243,8 +243,8 @@ fun SmsTestScreen() {
                             syncStatus = "Syncing..."
                             coroutineScope.launch {
                                 val config = FinancialSyncConfig(
-                                    backendUrl = "http://10.0.2.2:8080",
-                                    connectorToken = "local-test-token"
+                                    backendUrl = BuildConfig.FAMILY_FINANCE_BACKEND_URL,
+                                    connectorToken = BuildConfig.FAMILY_FINANCE_CONNECTOR_TOKEN
                                 )
                                 val client = FinancialEvidenceSyncClient(config)
                                 val service = FinancialEvidenceSyncService(client)

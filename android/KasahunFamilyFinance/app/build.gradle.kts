@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -17,6 +19,19 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val localProperties = Properties().apply {
+            val file = rootProject.file("local.properties")
+            if (file.isFile) file.inputStream().use { load(it) }
+        }
+        val backendUrl = providers.gradleProperty("FAMILY_FINANCE_BACKEND_URL")
+            .orElse(localProperties.getProperty("familyFinanceBackendUrl", "http://10.0.2.2:8080"))
+            .get()
+        val connectorToken = providers.gradleProperty("FAMILY_FINANCE_CONNECTOR_TOKEN")
+            .orElse(localProperties.getProperty("familyFinanceConnectorToken", "local-test-token"))
+            .get()
+        buildConfigField("String", "FAMILY_FINANCE_BACKEND_URL", "\"$backendUrl\"")
+        buildConfigField("String", "FAMILY_FINANCE_CONNECTOR_TOKEN", "\"$connectorToken\"")
     }
 
     buildTypes {
@@ -32,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
