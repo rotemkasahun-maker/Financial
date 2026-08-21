@@ -4,6 +4,7 @@ import { FinanceIngestionService } from '../backend/financeIngestionService.ts';
 
 class MockRepository {
   constructor(state = {}) { this.state = state; }
+  async read() { return this.state; }
   async update(fn) { return fn(this.state); }
 }
 
@@ -84,4 +85,38 @@ test('partial TRANSACTION evidence is staged safely', async () => {
 
   assert.equal(result.status, 'review_required');
   assert.equal(syncRepo.state.staging['partial-1'].status, 'review_required');
+});
+
+test('staged SMS can be linked once and remains resolved across rereads', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const data = new MockFinanceDataService([{
+    id: 'tx-3', date: '2026-08-20', merchant: 'Test Merchant', amount: 100, financialType: 'expense'
+  }]);
+  const service = new FinanceIngestionService({ dataService: data, syncRepository: syncRepo });
+  await service.processEvidence({
+    externalSourceId: 'sms-3', sourceType: 'android_sms', sender: 'Bank', originalSmsTimestamp: 1777000000000,
+    candidateType: 'TRANSACTION', normalized: { amount: 100, currency: 'ILS' }
+  });
+
+  const staged = await service.listStagedEvidence();
+  assert.equal(staged.length, 1);
+  assert.equal(staged[0].candidates[0].id, 'tx-3');
+  assert.deepEqual(await service.resolveStagedEvidence('sms-3', 'tx-3'), {
+    status: 'resolved', evidenceId: 'sms-3', transactionId: 'tx-3'
+  });
+  assert.equal((await service.listStagedEvidence()).length, 0);
+  assert.equal(data.links.length, 1);
+  assert.equal((await service.resolveStagedEvidence('sms-3', 'tx-3')).status, 'already_resolved');
+  assert.equal(data.links.length, 1);
+});
+
+test('staged SMS can be reviewed without changing financial state', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const data = new MockFinanceDataService();
+  const service = new FinanceIngestionService({ dataService: data, syncRepository: syncRepo });
+  await service.processEvidence({ externalSourceId: 'sms-4', sourceType: 'android_sms', candidateType: 'AMBIGUOUS', originalSmsTimestamp: 1 });
+  const result = await service.resolveStagedEvidence('sms-4', null, 'reviewed');
+  assert.equal(result.status, 'resolved');
+  assert.equal(data.links.length, 0);
+  assert.equal(syncRepo.state.staging['sms-4'].resolution, 'reviewed');
 });

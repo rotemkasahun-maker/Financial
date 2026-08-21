@@ -263,6 +263,17 @@ export function createBackend({
           return json(res, 200, result);
         }
 
+        if (req.method === 'GET' && url.pathname === '/api/ingestion/staging') {
+          if (!financeDataService) return json(res, 503, { error: 'finance_not_configured' });
+          return json(res, 200, { evidence: await ingestionService.listStagedEvidence() });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/ingestion/staging/resolve') {
+          if (!financeDataService) return json(res, 503, { error: 'finance_not_configured' });
+          const payload = await body(req);
+          return json(res, 200, await ingestionService.resolveStagedEvidence(payload.externalSourceId, payload.transactionId || null, payload.resolution || 'link'));
+        }
+
         /*
          * Standalone receipt AI endpoint.
          */

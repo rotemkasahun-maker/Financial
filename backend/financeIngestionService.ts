@@ -75,6 +75,36 @@ export class FinanceIngestionService {
     return result;
   }
 
+  async listStagedEvidence() {
+    const state = await this.syncRepository.read();
+    const transactions = await this.dataService.getTransactions();
+    return Object.values(state.staging || {})
+      .filter((item: any) => item.sourceType === 'android_sms' || item.candidateType === 'TRANSACTION' || item.candidateType === 'AMBIGUOUS')
+      .filter((item: any) => item.status === 'review_required')
+      .map((item: any) => ({ ...item, candidates: transactions.filter((tx: any) => tx.financialType === 'expense' && item.normalized?.amount != null && Number(tx.amount) === Number(item.normalized.amount)).slice(0, 5) }));
+  }
+
+  async resolveStagedEvidence(externalSourceId: string, transactionId: string | null, resolution: 'link' | 'reviewed' = 'link') {
+    if (!externalSourceId) throw new Error('externalSourceId is required');
+    return this.syncRepository.update(async (state: any) => {
+      const evidence = state.staging?.[externalSourceId];
+      if (!evidence) return { status: 'already_resolved', evidenceId: externalSourceId };
+      if (evidence.status === 'resolved') return { status: 'already_resolved', evidenceId: externalSourceId, transactionId: evidence.transactionId || null };
+      if (resolution === 'link') {
+        if (!transactionId) throw new Error('transactionId is required to link evidence');
+        const transaction = (await this.dataService.getTransactions()).find((item: any) => item.id === transactionId);
+        if (!transaction) throw new Error('Transaction not found');
+        await this.dataService.linkEvidence(transactionId, {
+          sourceType: evidence.sourceType || 'android_sms',
+          externalSourceId,
+          metadata: { sender: evidence.sender, originalSmsTimestamp: evidence.originalSmsTimestamp, bodyHash: evidence.bodyHash, ...(evidence.metadata || {}) }
+        });
+      }
+      state.staging[externalSourceId] = { ...evidence, status: 'resolved', resolution, transactionId: transactionId || null, resolvedAt: new Date().toISOString() };
+      return { status: 'resolved', evidenceId: externalSourceId, transactionId: transactionId || null };
+    });
+  }
+
   private hasMatchableTransactionData(evidence: FinancialEvidence) {
     const normalized = evidence.normalized;
     return Boolean(
