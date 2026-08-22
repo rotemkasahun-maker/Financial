@@ -36,3 +36,9 @@ This milestone adds a minimal pre-provisioned, household-scoped Web session boun
 **Verified:** household-scoped backend finance state, versioned transaction mutation, stale-write protection, idempotent manual cash creation, and the backend Web adapter boundary.
 
 **Not yet verified:** Web login/bootstrap, Web daily-use activation of the backend adapter, ledger bootstrap, shared receipt UI flow, shared tasks/reminders, and two-device daily use.
+
+## Web authenticated bootstrap
+
+- BEFORE: `family-finance/screenshots/backend-bootstrap-before.png` showed the prior mock/demo dashboard.
+- AFTER: `family-finance/screenshots/backend-bootstrap-after-login.png` shows the explicit login boundary. The authenticated backend ledger view is not claimed because no local pre-provisioned auth environment was available for safe screenshot capture.
+- Verified by code/tests: explicit demo mode is query-gated, login requests `/api/auth/session`, identity is checked through `/api/auth/me`, and successful login selects `BackendFinanceDataService` without mock fallback.
