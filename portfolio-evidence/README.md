@@ -42,3 +42,9 @@ This milestone adds a minimal pre-provisioned, household-scoped Web session boun
 - BEFORE: `family-finance/screenshots/backend-bootstrap-before.png` showed the prior mock/demo dashboard.
 - AFTER: `family-finance/screenshots/backend-bootstrap-after-login.png` shows the explicit login boundary. The authenticated backend ledger view is not claimed because no local pre-provisioned auth environment was available for safe screenshot capture.
 - Verified by code/tests: explicit demo mode is query-gated, login requests `/api/auth/session`, identity is checked through `/api/auth/me`, and successful login selects `BackendFinanceDataService` without mock fallback.
+
+## Real ledger import
+
+**Verified:** authenticated real import persists canonical household transactions, re-import is idempotent, household scope is enforced, and mock data is never promoted.
+
+**Not yet verified:** browser import against a configured real household, browser rendering of a populated backend ledger, two-client browser verification, shared receipt UI persistence, and shared tasks/reminders.

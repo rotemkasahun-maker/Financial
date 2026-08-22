@@ -87,6 +87,20 @@ export class BackendFinanceDataService {
     });
   }
 
+  async importRows(rows: any[], context: any) {
+    return this.repository.update(async state => {
+      let imported = 0; let skipped = 0;
+      for (const row of rows || []) {
+        if (row.excluded || !row.valid) continue;
+        const duplicate = state.transactions.find(item => (row.externalSourceId && item.externalSourceId === row.externalSourceId) || (item.date === row.date && Number(item.amount) === Number(row.amount) && item.merchant === row.merchant && item.sourceType === row.sourceType));
+        if (duplicate) { skipped += 1; continue; }
+        state.transactions.unshift({ id: row.id || `transaction-${randomUUID()}`, canonicalEventId: row.canonicalEventId || null, date: row.date, merchant: row.merchant, description: row.description, amount: Number(row.amount), currency: 'ILS', direction: row.direction, financialType: row.financialType || 'unknown', category: row.category || 'ללא קטגוריה', subcategory: row.subcategory || '', source: row.source || (row.sourceType === 'bank_import' ? 'ייבוא בנק' : 'ייבוא אשראי'), sourceType: row.sourceType, sourceAccount: row.sourceAccount || null, externalSourceId: row.externalSourceId || null, householdId: context.householdId, userId: context.userId, deviceId: context.deviceId, importedAt: new Date().toISOString(), receiptId: row.receiptId || null, countInTotals: row.countInTotals !== false, version: 1 });
+        imported += 1;
+      }
+      return { imported, skipped, transactions: structuredClone(state.transactions) };
+    });
+  }
+
   async getReceipts() {
     const state =
       await this.repository.read();

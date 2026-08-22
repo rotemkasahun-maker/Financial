@@ -251,6 +251,7 @@ export function createBackend({
             const payload = await body(req); payload.sourceMetadata = { ...(payload.sourceMetadata || {}), householdId: context.householdId, userId: context.userId, deviceId: context.deviceId };
             return json(res, 201, await financeDataService.saveReceipt(payload, payload.linkedTransactionId || null));
           }
+          if (req.method === 'POST' && url.pathname === '/api/finance/import') return json(res, 200, await financeDataService.importRows((await body(req)).rows, context));
         }
 
         if (

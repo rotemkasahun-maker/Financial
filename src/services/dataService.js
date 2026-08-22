@@ -48,6 +48,7 @@ export class BackendFinanceDataService extends FinanceDataService {
   async updateTransaction(id, changes, version) { return this.request(`/api/finance/transactions/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'If-Match': String(version) }, body: JSON.stringify(changes) }); }
   async createCashTransaction(input, idempotencyKey) { return this.request('/api/finance/cash', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input) }); }
   async saveReceipt(receipt, linkedTransactionId = null) { return this.request('/api/finance/receipts', { method: 'POST', body: JSON.stringify({ ...receipt, linkedTransactionId }) }); }
+  async approveFileImport(preview) { return this.request('/api/finance/import', { method: 'POST', body: JSON.stringify({ rows: preview.rows }) }); }
   async getRecurring() { return []; }
   async getReimbursementExpectations() { return []; }
   async getIngestionState() { return { sources: [], expectedDocuments: [], importRuns: [], issues: [], reminders: [] }; }
