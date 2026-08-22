@@ -30,3 +30,9 @@ The Portfolio source was confidently identified by its exact `family-finance.htm
 ## Household auth gate
 
 This milestone adds a minimal pre-provisioned, household-scoped Web session boundary. Verified by focused request tests: authenticated users map to `household-alpha`, unauthenticated/invalid requests return 401, and client household claims cannot switch the server-derived household. Shared ledger state, two-device synchronization, and household adoption remain unverified.
+
+## Shared finance backend slice
+
+**Verified:** household-scoped backend finance state, versioned transaction mutation, stale-write protection, idempotent manual cash creation, and the backend Web adapter boundary.
+
+**Not yet verified:** Web login/bootstrap, Web daily-use activation of the backend adapter, ledger bootstrap, shared receipt UI flow, shared tasks/reminders, and two-device daily use.

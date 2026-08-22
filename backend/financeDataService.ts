@@ -55,6 +55,38 @@ export class BackendFinanceDataService {
     );
   }
 
+  async getHouseholdState(context: any) {
+    const state = await this.repository.read();
+    return structuredClone({
+      transactions: state.transactions.filter(item => !item.householdId || item.householdId === context.householdId),
+      receipts: state.receipts.filter(item => !item.householdId || item.householdId === context.householdId)
+    });
+  }
+
+  async updateTransaction(transactionId: string, changes: any, context: any, expectedVersion: any) {
+    return this.repository.update(async state => {
+      const transaction = state.transactions.find(item => item.id === transactionId && item.householdId === context.householdId);
+      if (!transaction) throw Object.assign(new Error('Transaction not found'), { code: 'not_found' });
+      if (expectedVersion !== undefined && Number(transaction.version || 1) !== Number(expectedVersion)) throw Object.assign(new Error('Stale transaction'), { code: 'conflict', current: structuredClone(transaction) });
+      const allowed = ['merchant','description','amount','date','category','subcategory'];
+      for (const field of allowed) if (changes[field] !== undefined) transaction[field] = field === 'amount' ? Number(changes[field]) : String(changes[field] ?? '').trim();
+      transaction.version = Number(transaction.version || 1) + 1;
+      transaction.updatedAt = new Date().toISOString();
+      transaction.lastEditedBy = context.userId;
+      return structuredClone(transaction);
+    });
+  }
+
+  async createCashTransaction(input: any, context: any, idempotencyKey: string) {
+    return this.repository.update(async state => {
+      if (idempotencyKey && state.idempotency[idempotencyKey]) return structuredClone(state.idempotency[idempotencyKey]);
+      const transaction = { id: `transaction-${randomUUID()}`, date: input.date, merchant: String(input.merchant || '').trim(), description: String(input.description || '').trim(), amount: Number(input.amount), currency: 'ILS', direction: 'debit', financialType: 'expense', category: String(input.category || 'כללי').trim(), subcategory: String(input.subcategory || '').trim(), source: 'מזומן', sourceType: 'manual_cash', sourceAccount: 'cash', paymentMethod: 'cash', householdId: context.householdId, userId: context.userId, deviceId: context.deviceId, provenance: { sourceType: 'manual_cash', captureMethod: 'quick_cash' }, version: 1, importedAt: new Date().toISOString(), receiptId: null };
+      state.transactions.unshift(transaction);
+      if (idempotencyKey) state.idempotency[idempotencyKey] = transaction;
+      return structuredClone(transaction);
+    });
+  }
+
   async getReceipts() {
     const state =
       await this.repository.read();

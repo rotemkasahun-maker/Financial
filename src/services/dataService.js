@@ -40,6 +40,16 @@ export class FinanceDataService {
   async saveReceipt() { throw new Error('Not implemented'); }
 }
 
+export class BackendFinanceDataService extends FinanceDataService {
+  constructor({ origin, sessionToken, fetchImpl = globalThis.fetch } = {}) { super(); this.origin = origin; this.sessionToken = sessionToken; this.fetch = fetchImpl; }
+  async request(path, options = {}) { const response = await this.fetch(`${this.origin}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.sessionToken}`, ...(options.headers || {}) } }); if (!response.ok) { const error = new Error(`Finance request failed: ${response.status}`); error.status = response.status; error.payload = await response.json().catch(() => ({})); throw error; } return response.json(); }
+  async getTransactions() { return (await this.request('/api/finance/state')).transactions; }
+  async getReceipts() { return (await this.request('/api/finance/state')).receipts; }
+  async updateTransaction(id, changes, version) { return this.request(`/api/finance/transactions/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'If-Match': String(version) }, body: JSON.stringify(changes) }); }
+  async createCashTransaction(input, idempotencyKey) { return this.request('/api/finance/cash', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input) }); }
+  async saveReceipt(receipt, linkedTransactionId = null) { return this.request('/api/finance/receipts', { method: 'POST', body: JSON.stringify({ ...receipt, linkedTransactionId }) }); }
+}
+
 export class MockFinanceDataService extends FinanceDataService {
   constructor() { super(); this.transactionOverrides=loadTransactionOverrides(); this.transactions=structuredClone(transactions).map(item=>this.transactionOverrides[item.id]?{...item,...this.transactionOverrides[item.id]}:item); this.receipts = structuredClone(receipts); this.importSources=structuredClone(importSources); this.expectedDocuments=structuredClone(expectedDocuments); this.importRuns=structuredClone(importRuns); this.importIssues=structuredClone(importIssues); this.reminderTasks=structuredClone(reminderTasks);this.tasks=structuredClone(tasks);this.xpEvents=structuredClone(xpEvents);this.userScores=structuredClone(userScores);this.challenges=structuredClone(challenges);this.madridGoal=structuredClone(madridGoal);this.achievements=structuredClone(achievements);this.notificationRules=structuredClone(notificationRules);this.rewardConfig=structuredClone(rewardConfig);this.lastXPEvent=null;this.sourceRecords=[];this.canonicalEvents=[];this.reimbursementExpectations=[];this.classificationRules=loadRules();this.receiptKnowledge=loadReceiptKnowledge();this.historicalLearning=null;globalThis.__familyFinanceClassificationRules=this.classificationRules; }
   async getTransactions() { return structuredClone(this.transactions); }

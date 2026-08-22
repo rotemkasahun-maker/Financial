@@ -233,6 +233,26 @@ export function createBackend({
           catch { return json(res, 401, { error: 'unauthorized' }); }
         }
 
+        if (url.pathname.startsWith('/api/finance/')) {
+          if (!auth || !financeDataService) return json(res, 401, { error: 'unauthorized' });
+          let context;
+          try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          if (req.method === 'GET' && url.pathname === '/api/finance/state') return json(res, 200, await financeDataService.getHouseholdState(context));
+          if (req.method === 'PATCH' && url.pathname.startsWith('/api/finance/transactions/')) {
+            const id = decodeURIComponent(url.pathname.split('/').pop());
+            try { return json(res, 200, await financeDataService.updateTransaction(id, await body(req), context, req.headers['if-match'])); }
+            catch (error) { if (error.code === 'conflict') return json(res, 409, { error: 'conflict', current: error.current }); if (error.code === 'not_found') return json(res, 404, { error: 'not_found' }); throw error; }
+          }
+          if (req.method === 'POST' && url.pathname === '/api/finance/cash') {
+            const key = String(req.headers['idempotency-key'] || ''); if (!key) return json(res, 400, { error: 'idempotency_key_required' });
+            return json(res, 201, await financeDataService.createCashTransaction(await body(req), context, key));
+          }
+          if (req.method === 'POST' && url.pathname === '/api/finance/receipts') {
+            const payload = await body(req); payload.sourceMetadata = { ...(payload.sourceMetadata || {}), householdId: context.householdId, userId: context.userId, deviceId: context.deviceId };
+            return json(res, 201, await financeDataService.saveReceipt(payload, payload.linkedTransactionId || null));
+          }
+        }
+
         if (
           req.method === 'GET' &&
           (

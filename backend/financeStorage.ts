@@ -12,12 +12,14 @@ export type FinanceState = {
   version: number;
   transactions: any[];
   receipts: any[];
+  idempotency: Record<string, any>;
 };
 
 export const emptyFinanceState = (): FinanceState => ({
   version: 1,
   transactions: [],
   receipts: []
+  ,idempotency: {}
 });
 
 export class FinanceStateRepository {
@@ -112,6 +114,7 @@ function normalizeFinanceState(
       )
         ? value.receipts
         : []
+    ,idempotency: value?.idempotency && typeof value.idempotency === 'object' ? value.idempotency : {}
   };
 }
 
