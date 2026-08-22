@@ -1,7 +1,7 @@
 import { transactions, receipts, recurring } from '../data/mockData.js';
 import { importSources, expectedDocuments, importRuns, importIssues, reminderTasks } from '../data/ingestionMockData.js';
 import { tasks, xpEvents, userScores, challenges, achievements, notificationRules, rewardConfig, madridGoal } from '../data/gamificationMockData.js';
-import { completeReceiptTask, completeTaskExactlyOnce, ensureDeferredReviewTask, closeDeferredReviewTask } from './taskEngine.js';
+import { completeReceiptTask, completeTaskExactlyOnce, ensureDeferredReviewTask, ensureMissingReceiptTask, closeDeferredReviewTask } from './taskEngine.js';
 import { createSourceRecord, createCanonicalEvent } from './reconciliation.js';
 import { upsertClassificationRule, disableClassificationRule, applySavedClassificationRules, mergeHydratedClassificationRules } from './classificationRules.js';
 import { rerunDeferredReconciliation } from './reviewReconciliation.js';
@@ -62,7 +62,8 @@ export class MockFinanceDataService extends FinanceDataService {
   async saveHistoricalReceiptKnowledge(result) { this.receiptKnowledge=persistableReceiptKnowledge(result);persistReceiptKnowledge(this.receiptKnowledge);return this.getReceiptKnowledge(); }
   async rejectHistoricalRule(proposalId) { if(this.historicalLearning)this.historicalLearning.proposals=this.historicalLearning.proposals.map(item=>item.id===proposalId?{...item,status:'rejected'}:item);return structuredClone(this.historicalLearning); }
   async getIngestionState() { return structuredClone({sources:this.importSources,expectedDocuments:this.expectedDocuments,importRuns:this.importRuns,issues:this.importIssues,reminders:this.reminderTasks}); }
-  async getEngagementState() { return structuredClone({tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores,challenges:this.challenges,madridGoal:this.madridGoal,achievements:this.achievements,notificationRules:this.notificationRules,rewardConfig:this.rewardConfig,lastXPEvent:this.lastXPEvent}); }
+  async getEngagementState() { await this.scanMissingReceiptTasks(); return structuredClone({tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores,challenges:this.challenges,madridGoal:this.madridGoal,achievements:this.achievements,notificationRules:this.notificationRules,rewardConfig:this.rewardConfig,lastXPEvent:this.lastXPEvent}); }
+  async scanMissingReceiptTasks(now=new Date()) { for(const transaction of this.transactions){const result=ensureMissingReceiptTask(transaction,this.tasks,{now});this.tasks=result.tasks} return structuredClone(this.tasks); }
   async completeUserTask(taskId) { const result=completeTaskExactlyOnce({taskId,tasks:this.tasks,xpEvents:this.xpEvents,userScores:this.userScores});this.tasks=result.tasks;this.xpEvents=result.xpEvents;this.userScores=result.userScores;this.lastXPEvent=result.xpEvent;return this.getEngagementState(); }
   async claimMadridChallenge(challengeId,userId='demo-member-a') { const result=completeMadridChallengeExactlyOnce({challengeId,challenges:this.challenges,xpEvents:this.xpEvents,userScores:this.userScores,goal:this.madridGoal,completedByUserId:userId});this.challenges=result.challenges;this.xpEvents=result.xpEvents;this.userScores=result.userScores;this.madridGoal=result.goal;this.lastXPEvent=result.xpEvent;return this.getEngagementState(); }
   async resolveIssue(issueId) { this.importIssues=this.importIssues.map(i=>i.id===issueId?{...i,status:'resolved'}:i); return this.getIngestionState(); }
