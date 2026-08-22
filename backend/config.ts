@@ -85,6 +85,16 @@ export function loadConfig(env = process.env) {
         'CONNECTOR_SHARED_TOKEN'
       ) || null,
 
+    authSigningSecret:
+      get('AUTH_SIGNING_SECRET') || null,
+
+    authSessionDurationMs:
+      Math.min(24 * 60 * 60 * 1000, Math.max(5 * 60 * 1000, Number(get('AUTH_SESSION_DURATION_MS') || 30 * 60 * 1000))),
+
+    authUsers: (() => {
+      try { return JSON.parse(get('AUTH_USERS_JSON') || '[]'); } catch { return []; }
+    })(),
+
     schedulerToken:
       get(
         'SCHEDULER_SHARED_TOKEN'

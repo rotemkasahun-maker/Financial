@@ -43,6 +43,7 @@ import {
 import {
   ImportPipeline
 } from '../src/shared/importPipeline.js';
+import { createAuth } from './auth.ts';
 
 const json = (res, status, value) => {
   res.writeHead(status, {
@@ -124,6 +125,8 @@ export function createBackend({
 } = {}) {
   config =
     config || loadConfig();
+
+  const auth = config.authSigningSecret ? createAuth(config) : null;
 
   repository =
     repository ||
@@ -214,6 +217,20 @@ export function createBackend({
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
           });
           return res.end();
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/auth/session') {
+          if (!auth) return json(res, 503, { error: 'auth_not_configured' });
+          const payload = await body(req);
+          const identity = auth.authenticate(payload.userId, payload.credential);
+          if (!identity) return json(res, 401, { error: 'invalid_credentials' });
+          return json(res, 200, { session: auth.issue(identity), user: identity });
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+          if (!auth) return json(res, 503, { error: 'auth_not_configured' });
+          try { return json(res, 200, { user: auth.authenticateRequest(req) }); }
+          catch { return json(res, 401, { error: 'unauthorized' }); }
         }
 
         if (

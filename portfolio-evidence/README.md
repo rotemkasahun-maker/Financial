@@ -26,3 +26,7 @@ Generated locally with the reusable Playwright capture script. These files are u
 - Portfolio: `C:\Users\gaya\Documents\ChatGPT\פורטפוליו\family-finance.html`, served locally at `http://127.0.0.1:4174`
 
 The Portfolio source was confidently identified by its exact `family-finance.html` filename and rendered title `Family Finance — Rotem Kasahun`. Both captures use local demo/redacted content only.
+
+## Household auth gate
+
+This milestone adds a minimal pre-provisioned, household-scoped Web session boundary. Verified by focused request tests: authenticated users map to `household-alpha`, unauthenticated/invalid requests return 401, and client household claims cannot switch the server-derived household. Shared ledger state, two-device synchronization, and household adoption remain unverified.
