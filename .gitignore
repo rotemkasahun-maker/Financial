@@ -45,6 +45,7 @@ historical-receipts/
 private-receipts/
 local-snapshots/
 .local/
+portfolio-evidence/**/screenshots/*.png
 /*.csv
 /*.xlsx
 

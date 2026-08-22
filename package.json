@@ -13,5 +13,8 @@
     "openai": "^7.5.0",
     "pdfjs-dist": "^6.2.108",
     "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }

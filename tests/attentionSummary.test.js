@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { renderAttention } from '../src/views/ingestionViews.js';
+
+const state=(overrides={})=>({attentionNow:'2026-08-22T12:00:00Z',ingestion:{issues:[],smsStaging:[]},engagement:{tasks:[]},...overrides});
+test('attention summary counts open actionable items and estimates stable effort',()=>{const html=renderAttention(state({ingestion:{issues:[{id:'i',status:'open',severity:'high',title:'דחוף',description:'בעיה',action:'בדיקה'}],smsStaging:[{externalSourceId:'s',status:'review_required',sender:'בנק'}]},engagement:{tasks:[{id:'r',type:'missing_receipt',status:'open',explanation:'חנות · 50 ₪',dueAt:'2026-08-20T00:00:00Z'}]}}),{header:()=>''});assert.match(html,/>3</);assert.match(html,/בערך 3 דקות/)});
+test('priority order is deterministic: high issue, SMS, missing receipt',()=>{const html=renderAttention(state({ingestion:{issues:[{id:'i',status:'open',severity:'high',title:'HIGH',description:'',action:'בדיקה'}],smsStaging:[{externalSourceId:'s',status:'review_required',sender:'SMS'}]},engagement:{tasks:[{id:'r',type:'missing_receipt',status:'open',explanation:'RECEIPT'}]}}),{header:()=>''});assert.ok(html.indexOf('HIGH')<html.indexOf('SMS'));assert.ok(html.indexOf('SMS')<html.indexOf('RECEIPT'))});
+test('completed items are excluded and all-clear is calm',()=>{const html=renderAttention(state({ingestion:{issues:[{id:'done',status:'resolved',severity:'high',title:'DONE'}]},engagement:{tasks:[{id:'done-task',type:'missing_receipt',status:'completed',explanation:'DONE'}]}}),{header:()=>''});assert.match(html,/הכול מסודר/);assert.doesNotMatch(html,/DONE/)})
