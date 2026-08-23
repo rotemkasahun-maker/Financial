@@ -49,3 +49,15 @@ This milestone adds a minimal pre-provisioned, household-scoped Web session boun
 **Verified:** authenticated real import persists canonical household transactions, re-import is idempotent, household scope is enforced, and mock data is never promoted.
 
 **Not yet verified:** browser import against a configured real household, browser rendering of a populated backend ledger, two-client browser verification, shared receipt UI persistence, and shared tasks/reminders.
+
+## Core Web action wiring
+
+**Working-tree milestone:** browser import, Quick Edit, Quick Cash, and receipt save/link now use the authenticated backend adapter boundary. The adapter supplies honest empty import context, normalizes import refresh state, the receipt pipeline follows the authenticated service, Quick Edit sends the current version, and Quick Cash carries a stable idempotency key.
+
+**Verification limitation:** the local backend process used for browser E2E became unavailable/errored during UI persistence attempts, so no PASS claim is made for the four browser flows or Client B in this milestone. No screenshot was created and no historical BEFORE state was fabricated.
+
+## Browser import UI wiring
+
+**Verified:** a safe synthetic supported bank fixture reaches the real browser preview, approval, authenticated `/api/finance/import`, reload/re-authentication, and Client B shared read. Re-importing the same external source ID leaves one canonical transaction.
+
+**Verified:** browser receipt review linked a safe synthetic receipt to an existing transaction; the link survived re-authentication and Client B saw the same receipt-linked transaction. Backend state contained one transaction and one linked receipt.

@@ -48,7 +48,8 @@ export class BackendFinanceDataService extends FinanceDataService {
   async updateTransaction(id, changes, version) { return this.request(`/api/finance/transactions/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'If-Match': String(version) }, body: JSON.stringify(changes) }); }
   async createCashTransaction(input, idempotencyKey) { return this.request('/api/finance/cash', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input) }); }
   async saveReceipt(receipt, linkedTransactionId = null) { return this.request('/api/finance/receipts', { method: 'POST', body: JSON.stringify({ ...receipt, linkedTransactionId }) }); }
-  async approveFileImport(preview) { return this.request('/api/finance/import', { method: 'POST', body: JSON.stringify({ rows: preview.rows }) }); }
+  async getImportPreparationContext() { const state = await this.request('/api/finance/state'); return { classificationRules: [], existingTransactions: state.transactions || [], existingReceipts: state.receipts || [], reconciliationEvidence: { sourceRecords: [], receipts: state.receipts || [], cardTransactions: [], reimbursementExpectations: [], reimbursementExpenses: [] } }; }
+  async approveFileImport(preview) { const result = await this.request('/api/finance/import', { method: 'POST', body: JSON.stringify({ rows: preview.rows }) }); const state = await this.request('/api/finance/state'); return { ...result, run: result.run || { importedRows: Number(result.imported || 0), duplicatesSkipped: Number(result.skipped || 0) }, receipts: state.receipts || [], ingestion: await this.getIngestionState() }; }
   async getRecurring() { return []; }
   async getReimbursementExpectations() { return []; }
   async getIngestionState() { return { sources: [], expectedDocuments: [], importRuns: [], issues: [], reminders: [] }; }

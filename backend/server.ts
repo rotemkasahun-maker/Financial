@@ -52,8 +52,8 @@ const json = (res, status, value) => {
     'Cache-Control':
       'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, If-Match',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS'
   });
 
   res.end(
@@ -213,8 +213,8 @@ export function createBackend({
         if (req.method === 'OPTIONS') {
           res.writeHead(204, {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, If-Match',
+            'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS'
           });
           return res.end();
         }
