@@ -41,7 +41,7 @@ export class FinanceDataService {
 }
 
 export class BackendFinanceDataService extends FinanceDataService {
-  constructor({ origin, sessionToken, fetchImpl = globalThis.fetch } = {}) { super(); this.origin = origin; this.sessionToken = sessionToken; this.fetch = fetchImpl; }
+  constructor({ origin, sessionToken, fetchImpl = globalThis.fetch } = {}) { super(); this.origin = origin; this.sessionToken = sessionToken; this.fetch = fetchImpl.bind(globalThis); }
   async request(path, options = {}) { const response = await this.fetch(`${this.origin}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.sessionToken}`, ...(options.headers || {}) } }); if (!response.ok) { const error = new Error(`Finance request failed: ${response.status}`); error.status = response.status; error.payload = await response.json().catch(() => ({})); throw error; } return response.json(); }
   async getTransactions() { return (await this.request('/api/finance/state')).transactions; }
   async getReceipts() { return (await this.request('/api/finance/state')).receipts; }
@@ -52,8 +52,9 @@ export class BackendFinanceDataService extends FinanceDataService {
   async getRecurring() { return []; }
   async getReimbursementExpectations() { return []; }
   async getIngestionState() { return { sources: [], expectedDocuments: [], importRuns: [], issues: [], reminders: [] }; }
-  async getEngagementState() { return { tasks: [], xpEvents: [], userScores: [], challenges: [], achievements: [], notificationRules: [], lastXPEvent: null }; }
+  async getEngagementState() { return { tasks: [], xpEvents: [], userScores: [{ userId: 'demo-member-a', xp: 0, level: 1, activeStreak: 0 }], challenges: [], achievements: [], notificationRules: [], lastXPEvent: null }; }
   async getClassificationRules() { return []; }
+  async hydrateClassificationRules() { return []; }
 }
 
 export class MockFinanceDataService extends FinanceDataService {
