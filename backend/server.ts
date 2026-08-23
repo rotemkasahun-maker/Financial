@@ -238,6 +238,8 @@ export function createBackend({
           let context;
           try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
           if (req.method === 'GET' && url.pathname === '/api/finance/state') return json(res, 200, await financeDataService.getHouseholdState(context));
+          if (req.method === 'POST' && url.pathname.startsWith('/api/finance/tasks/')) { const id = decodeURIComponent(url.pathname.split('/')[4]); try { return json(res, 200, await financeDataService.completeTask(id, context)); } catch (error) { if (error.code === 'not_found') return json(res, 404, { error: 'not_found' }); throw error; } }
+          if (req.method === 'POST' && url.pathname.startsWith('/api/finance/expected-documents/') && url.pathname.endsWith('/receive')) { const id = decodeURIComponent(url.pathname.split('/')[4]); try { return json(res, 200, await financeDataService.receiveExpectedDocument(id, context)); } catch (error) { if (error.code === 'not_found') return json(res, 404, { error: 'not_found' }); throw error; } }
           if (req.method === 'PATCH' && url.pathname.startsWith('/api/finance/transactions/')) {
             const id = decodeURIComponent(url.pathname.split('/').pop());
             try { return json(res, 200, await financeDataService.updateTransaction(id, await body(req), context, req.headers['if-match'])); }

@@ -56,12 +56,38 @@ export class BackendFinanceDataService {
   }
 
   async getHouseholdState(context: any) {
-    const state = await this.repository.read();
+    const state = await this.repository.update(async current => { await this.ensureMaintenance(current, new Date(), context); return current; });
     return structuredClone({
       transactions: state.transactions.filter(item => !item.householdId || item.householdId === context.householdId),
-      receipts: state.receipts.filter(item => !item.householdId || item.householdId === context.householdId)
+      receipts: state.receipts.filter(item => !item.householdId || item.householdId === context.householdId),
+      tasks: state.tasks.filter(item => !item.householdId || item.householdId === context.householdId),
+      expectedDocuments: state.expectedDocuments.filter(item => !item.householdId || item.householdId === context.householdId),
+      rewardEvents: state.rewardEvents
     });
   }
+
+  async ensureMaintenance(state: any, now = new Date(), context: any = null) {
+    state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    state.expectedDocuments = Array.isArray(state.expectedDocuments) ? state.expectedDocuments : [];
+    state.transactions = Array.isArray(state.transactions) ? state.transactions : [];
+    state.receipts = Array.isArray(state.receipts) ? state.receipts : [];
+    state.rewardEvents = state.rewardEvents && typeof state.rewardEvents === 'object' ? state.rewardEvents : {};
+    const period = now.toISOString().slice(0, 7);
+    for (const rule of [{ type: 'rehabilitation_document', day: 1, title: 'העלאת המסמך החודשי מאגף השיקום' }, { type: 'credit_card_statement', day: 2, title: 'העלאת פירוט האשראי החודשי' }]) {
+      const id = `expected-${rule.type}-${period}`;
+      let doc = state.expectedDocuments.find((item: any) => item.id === id);
+      if (!doc) { doc = { id, householdId: context?.householdId || null, documentType: rule.type, period, dueDate: `${period}-${String(rule.day).padStart(2, '0')}`, received: false, status: 'open' }; state.expectedDocuments.push(doc); }
+      const key = `expected_document:${id}`;
+      if (!doc.received && !state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || doc.householdId || null, type: 'expected_document', dedupeKey: key, relatedRecordId: id, title: rule.title, status: 'open', priority: 'high', xpReward: 15 });
+    }
+    for (const tx of state.transactions.filter((item: any) => item.financialType === 'expense' && !item.receiptId)) {
+      const key = `missing_receipt:${tx.id}`;
+      if (!state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || tx.householdId || null, type: 'missing_receipt', dedupeKey: key, relatedRecordId: tx.id, title: `חסרה קבלה ל${tx.merchant}`, explanation: `${tx.merchant} · ${tx.amount} ₪`, status: 'open', priority: 'normal', xpReward: 10, deepLink: { route: 'receipt_capture', params: { transactionId: tx.id } } });
+    }
+  }
+
+  async completeTask(taskId: string, context: any) { return this.repository.update(async state => { await this.ensureMaintenance(state); const task = state.tasks.find((item: any) => item.id === taskId && (!item.householdId || item.householdId === context.householdId)); if (!task) throw Object.assign(new Error('Task not found'), { code: 'not_found' }); if (task.status !== 'completed') { task.status = 'completed'; task.completedAt = new Date().toISOString(); const rewardKey = `task:${task.id}`; if (!state.rewardEvents[rewardKey]) state.rewardEvents[rewardKey] = { taskId: task.id, amount: task.xpReward || 0, completedBy: context.userId, completedAt: task.completedAt }; } return structuredClone({ task, reward: state.rewardEvents[`task:${task.id}`] || null }); }); }
+  async receiveExpectedDocument(documentId: string, context: any) { return this.repository.update(async state => { await this.ensureMaintenance(state); const doc = state.expectedDocuments.find((item: any) => item.id === documentId); if (!doc) throw Object.assign(new Error('Document not found'), { code: 'not_found' }); doc.received = true; doc.status = 'completed'; for (const task of state.tasks.filter((item: any) => item.relatedRecordId === documentId)) { if (task.status !== 'completed') { task.status = 'completed'; task.completedAt = new Date().toISOString(); const rewardKey = `task:${task.id}`; if (!state.rewardEvents[rewardKey]) state.rewardEvents[rewardKey] = { taskId: task.id, amount: task.xpReward || 0, completedBy: context.userId, completedAt: task.completedAt }; } } return structuredClone(doc); }); }
 
   async updateTransaction(transactionId: string, changes: any, context: any, expectedVersion: any) {
     return this.repository.update(async state => {
@@ -176,6 +202,7 @@ export class BackendFinanceDataService {
               linkedTransactionId,
               existing.id
             );
+            completeLinkedReceiptTasks(state, linkedTransactionId);
           }
 
           return structuredClone(
@@ -207,6 +234,7 @@ export class BackendFinanceDataService {
             linkedTransactionId,
             saved.id
           );
+          completeLinkedReceiptTasks(state, linkedTransactionId);
         } else {
           state.transactions.unshift(
             createTransactionFromReceipt(
@@ -443,4 +471,12 @@ function createTransactionFromReceipt(
       metadata.importedAt ||
       new Date().toISOString()
   };
+}
+
+function completeLinkedReceiptTasks(state: any, transactionId: string) {
+  for (const task of state.tasks || []) if (task.type === 'missing_receipt' && task.relatedRecordId === transactionId && task.status !== 'completed') {
+    task.status = 'completed'; task.completedAt = new Date().toISOString();
+    const key = `task:${task.id}`;
+    if (!state.rewardEvents[key]) state.rewardEvents[key] = { taskId: task.id, amount: task.xpReward || 0, completedAt: task.completedAt };
+  }
 }

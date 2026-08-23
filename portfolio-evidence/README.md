@@ -61,3 +61,11 @@ This milestone adds a minimal pre-provisioned, household-scoped Web session boun
 **Verified:** a safe synthetic supported bank fixture reaches the real browser preview, approval, authenticated `/api/finance/import`, reload/re-authentication, and Client B shared read. Re-importing the same external source ID leaves one canonical transaction.
 
 **Verified:** browser receipt review linked a safe synthetic receipt to an existing transaction; the link survived re-authentication and Client B saw the same receipt-linked transaction. Backend state contained one transaction and one linked receipt.
+
+## Shared maintenance view-model compatibility
+
+**Verified:** authenticated maintenance tasks are enriched at the Web adapter boundary from their canonical transaction IDs, so shared missing-receipt cards display the correct merchant/context without duplicating transaction data in durable task records.
+
+**Not yet verified:** Android reminders, Android household authentication, and full two-client maintenance completion E2E.
+
+The deterministic maintenance run used a fresh encrypted E2E state and unique transaction ID `tx-e2e-unique-001`; the missing-receipt flow linked the receipt and removed the task from Attention for both authenticated clients. Current-month expected documents (rehabilitation payslip due on the 1st and credit-card statement due on the 2nd) are received and remain completed for both clients after reload. Attention shows the shared all-clear state. AFTER evidence: `family-finance/screenshots/shared-maintenance-client-b-after.png`, `family-finance/screenshots/shared-document-completed-after.png`, `family-finance/screenshots/shared-maintenance-final-attention-after.png`. BEFORE states remain unavailable; Android reminders and long-term household adoption remain unverified.

@@ -13,13 +13,16 @@ export type FinanceState = {
   transactions: any[];
   receipts: any[];
   idempotency: Record<string, any>;
+  tasks: any[];
+  expectedDocuments: any[];
+  rewardEvents: Record<string, any>;
 };
 
 export const emptyFinanceState = (): FinanceState => ({
   version: 1,
   transactions: [],
   receipts: []
-  ,idempotency: {}
+  ,idempotency: {}, tasks: [], expectedDocuments: [], rewardEvents: {}
 });
 
 export class FinanceStateRepository {
@@ -114,7 +117,10 @@ function normalizeFinanceState(
       )
         ? value.receipts
         : []
-    ,idempotency: value?.idempotency && typeof value.idempotency === 'object' ? value.idempotency : {}
+    ,idempotency: value?.idempotency && typeof value.idempotency === 'object' ? value.idempotency : {},
+    tasks: Array.isArray(value?.tasks) ? value.tasks : [],
+    expectedDocuments: Array.isArray(value?.expectedDocuments) ? value.expectedDocuments : [],
+    rewardEvents: value?.rewardEvents && typeof value.rewardEvents === 'object' ? value.rewardEvents : {}
   };
 }
 
