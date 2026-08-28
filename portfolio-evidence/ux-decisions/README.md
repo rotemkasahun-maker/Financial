@@ -6,6 +6,8 @@ The public Portfolio UI is a separate editorial layer. It may select and summari
 
 Findings from Product Chat, Portfolio UI, and Codex enter through the corresponding `incoming/` directory. Incoming material is provisional. It must be compared semantically with existing canonical records and assigned an outcome from `MERGE_RULES.md` before it can become canonical.
 
+`MERGE_RULES.md` is the single current Standing Product & UX Decision Logging Rule and governs qualification, evidence integrity, validation, privacy, ownership, and semantic merge outcomes.
+
 Meaningful Product decisions belong here when they materially change user experience, define trust or uncertainty boundaries, determine what the product exposes or deliberately withholds, affect household workflow or mental models, define AI/human responsibility, establish validation required before a product promise, or express product architecture relevant to user value. Not every implementation change belongs here: pure refactors, bugs, deployment work, build configuration, test plumbing, dependency changes, infrastructure, and other engineering details do not qualify merely because they affect the product.
 
 Each canonical record may optionally include a `Decision type` field using only materially relevant types: `UX`, `Behavioral UX`, `AI UX`, `Information Architecture`, `Product`, `Validation`, `System Trust`, `Product Architecture`, or `UX Architecture`.

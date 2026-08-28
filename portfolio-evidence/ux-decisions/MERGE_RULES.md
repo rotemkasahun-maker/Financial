@@ -1,10 +1,22 @@
-# Product & UX Decision Archive — Merge Rules
+# Standing Product & UX Decision Logging Rule
+
+This file is the single current standing rule and merge policy for the **Family Finance Product & UX Decision Archive**. It replaces any narrower UX-only framing; no competing standing rule should be created.
 
 ## Purpose
 
 Incoming findings are source material, not canonical records. Review them semantically rather than matching only titles, slugs, filenames, or wording. Preserve provenance and do not strengthen claims beyond the available evidence. This archive may include meaningful Product decisions alongside UX decisions when they materially change experience, define trust or uncertainty boundaries, shape household workflow or mental models, define AI/human responsibility, establish validation required before a product promise, or express product architecture relevant to user value.
 
-Use an optional `Decision type` field in new or materially updated records only when useful. Allowed values are: `UX`, `Behavioral UX`, `AI UX`, `Information Architecture`, `Product`, `Validation`, `System Trust`, `Product Architecture`, and `UX Architecture`. Avoid taxonomy inflation; routine engineering, refactors, bugs, implementation mechanics, and infrastructure remain out of scope unless they substantively establish or alter such a decision.
+Meaningful decisions may involve UX, Behavioral UX, AI UX, Information Architecture, Product, Validation, System Trust, Product Architecture, or UX Architecture. Use the causal form where possible: because a user, household, or product is likely to encounter X, we chose Y, which changes Z. Technical complexity alone is not product judgment.
+
+Canonical records must distinguish `USER-STATED NEED`, `DESIGN INFERENCE`, `IMPLEMENTED`, and `VERIFIED`. Implementation is not validation. Preserve prior state, constraints, alternatives, rejected approaches, trade-offs, failures, open questions, and outcomes only where supported by evidence.
+
+Validation ceilings are `DESIGN DECISION ONLY`, `PROTOTYPE`, `SYNTHETIC TEST`, `DEVICE E2E`, and `REAL HOUSEHOLD USE`, with `partial` or `narrow` qualifiers when needed. Never generalize narrow household evidence, device E2E, rendered browser QA, or passing automated tests into broader user value or adoption claims.
+
+Never fabricate or reconstruct research, quotes, metrics, screenshots, BEFORE states, implementation states, behavior, outcomes, adoption, or financial evidence. Real household data remains private; publish only reviewed/redacted or synthetic representations and label private/local references clearly. AI-assisted ownership must distinguish product/design ownership from implementation authorship and must not imply unsupported manual coding.
+
+Archive completeness is not portfolio completeness. Public selection should be complementary and employer-facing; a canonical decision may remain supporting-only or private.
+
+Use an optional `Decision type` field in new or materially updated records only when useful. Allowed values are: `UX`, `Behavioral UX`, `AI UX`, `Information Architecture`, `Product`, `Validation`, `System Trust`, `Product Architecture`, and `UX Architecture`. Avoid taxonomy inflation; routine engineering, refactors, bugs, implementation mechanics, infrastructure, workflow mechanics, and cosmetic changes remain out of scope unless they substantively establish or alter such a decision.
 
 ## Required outcome
 
