@@ -1,8 +1,10 @@
-# UX Decision Archive — Merge Rules
+# Product & UX Decision Archive — Merge Rules
 
 ## Purpose
 
-Incoming findings are source material, not canonical records. Review them semantically rather than matching only titles, slugs, filenames, or wording. Preserve provenance and do not strengthen claims beyond the available evidence.
+Incoming findings are source material, not canonical records. Review them semantically rather than matching only titles, slugs, filenames, or wording. Preserve provenance and do not strengthen claims beyond the available evidence. This archive may include meaningful Product decisions alongside UX decisions when they materially change experience, define trust or uncertainty boundaries, shape household workflow or mental models, define AI/human responsibility, establish validation required before a product promise, or express product architecture relevant to user value.
+
+Use an optional `Decision type` field in new or materially updated records only when useful. Allowed values are: `UX`, `Behavioral UX`, `AI UX`, `Information Architecture`, `Product`, `Validation`, `System Trust`, `Product Architecture`, and `UX Architecture`. Avoid taxonomy inflation; routine engineering, refactors, bugs, implementation mechanics, and infrastructure remain out of scope unless they substantively establish or alter such a decision.
 
 ## Required outcome
 
@@ -31,4 +33,3 @@ Before applying an outcome:
 ## Canonicalization boundary
 
 Only reviewed material may update `decisions/` and `MASTER_INDEX.md`. A filename or proposed slug from an incoming source is advisory until semantic review confirms whether it represents a new decision or belongs to an existing one.
-

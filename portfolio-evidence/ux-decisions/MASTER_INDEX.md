@@ -1,6 +1,6 @@
-# Family Finance UX Decision Archive — Master Index
+# Family Finance Product & UX Decision Archive — Master Index
 
-This is the canonical deep-history index. Portfolio UI is a separate editorial layer. Validation applies only to the named decision.
+This is the canonical deep-history index. Portfolio UI is a separate editorial layer, and archive completeness is not public portfolio completeness. Validation applies only to the named decision. Canonical records may optionally declare a materially relevant `Decision type`.
 
 | Decision | Slug | Validation |
 |---|---|---|
