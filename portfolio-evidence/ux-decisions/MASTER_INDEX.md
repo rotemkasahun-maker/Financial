@@ -28,6 +28,7 @@ This is the canonical deep-history index. Portfolio UI is a separate editorial l
 | Private evidence pipeline | [privacy-preserving-financial-evidence-pipeline](decisions/privacy-preserving-financial-evidence-pipeline/decision.md) | DEVICE E2E |
 | Android shared-truth reminders | [shared-truth-android-reminders](decisions/shared-truth-android-reminders/decision.md) | DEVICE E2E (partial) |
 | Receipt grace window | [receipt-expectation-grace-window](decisions/receipt-expectation-grace-window/decision.md) | SYNTHETIC TEST |
+| Financial-state validation before exposure | [real-world-financial-state-validation-before-exposure](decisions/real-world-financial-state-validation-before-exposure/decision.md) | REAL HOUSEHOLD USE (narrow) |
 
 ## Binary aliases
 
