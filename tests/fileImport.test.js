@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, filterPreviewRows, applyReviewDecision, normalizeDate, parseAmount, parseFeeAmount } from '../src/services/fileImport.js';
+import { parseCsv, detectDelimiter, trimTrailingEmptyFields, normalizeRows, buildImportPreview, createValidatedImportPreview, filterPreviewRows, applyReviewDecision, normalizeDate, parseAmount, parseFeeAmount, normalizePostingStatus } from '../src/services/fileImport.js';
 import { renderFileImport } from '../src/views/fileImportView.js';
+import { MockFinanceDataService } from '../src/services/dataService.js';
 
 test('parses an Israeli bank CSV with a title row and debit/credit columns',()=>{
   const csv='דוח תנועות לחשבון\nתאריך,תיאור,חובה,זכות,אסמכתא\n12.08.2026,רמי לוי,"487.30",,abc-1\n13.08.2026,החזר מחבר,,100,abc-2';
@@ -17,6 +18,45 @@ test('normalizes signed amounts, Israeli dates and Excel serial dates',()=>{
   assert.equal(parseAmount('250-'),-250);
   assert.equal(normalizeDate('12/08/2026'),'2026-08-12');
   assert.equal(normalizeDate(46246),'2026-08-12');
+});
+
+test('normalizes posting status without assuming a missing status is posted',()=>{
+  assert.equal(normalizePostingStatus('בוצע'),'posted');
+  assert.equal(normalizePostingStatus('Pending'),'pending');
+  assert.equal(normalizePostingStatus(null),'unknown');
+  assert.equal(normalizePostingStatus(null,{guaranteedPostingStatus:'posted'}),'posted');
+});
+
+test('bank normalization preserves raw status, account and running balance',()=>{
+  const parsed=normalizeRows([
+    ['תאריך','תיאור','סכום','חשבון','סטטוס','יתרה'],
+    ['28.08.2026','תנועת בדיקה סינתטית','-410','qa-account-primary','נרשם','10,945.25'],
+    ['28.08.2026','תנועה סינתטית ממתינה','-73','qa-account-primary','בהמתנה','10,872.25']
+  ],{filename:'bank.csv'});
+  assert.deepEqual(parsed.rows.map(row=>({postingStatus:row.postingStatus,rawStatus:row.rawStatus,sourceAccount:row.sourceAccount,runningBalance:row.runningBalance})),[
+    {postingStatus:'posted',rawStatus:'נרשם',sourceAccount:'qa-account-primary',runningBalance:10945.25},
+    {postingStatus:'pending',rawStatus:'בהמתנה',sourceAccount:'qa-account-primary',runningBalance:10872.25}
+  ]);
+});
+
+test('mock import preserves bank movement semantics on source records and transactions',async()=>{
+  const parsed=normalizeRows([
+    ['תאריך','תיאור','סכום','חשבון','סטטוס','יתרה','אסמכתא'],
+    ['28.08.2026','תנועת בדיקה סינתטית','-410','qa-account-primary','נרשם','10,945.25','qa-posted-1']
+  ],{filename:'bank.csv'});
+  const service=new MockFinanceDataService();
+  service.transactions=[];service.sourceRecords=[];service.canonicalEvents=[];service.tasks=[];
+  const preview=buildImportPreview(parsed);
+  preview.rows[0]=applyReviewDecision(preview.rows[0],'expense');
+  const result=await service.approveFileImport(preview);
+  const transaction=result.transactions.find(item=>item.externalSourceId==='qa-posted-1');
+  const sourceRecord=result.sourceRecords.find(item=>item.externalTransactionId==='qa-posted-1');
+  for(const record of [transaction,sourceRecord]){
+    assert.equal(record.sourceAccount,'qa-account-primary');
+    assert.equal(record.postingStatus,'posted');
+    assert.equal(record.rawStatus,'נרשם');
+    assert.equal(record.runningBalance,10945.25);
+  }
 });
 
 test('preview marks an existing transaction and preserves a receipt match',()=>{
@@ -94,7 +134,7 @@ test('parses the generic eight-column signed-amount bank profile with trailing d
   assert.equal(result.parsed.columnMap.fee,6);
   assert.equal(result.parsed.columnMap.channel,7);
   assert.deepEqual(result.parsed.rows.map(row=>[row.amount,row.direction]),[[100,'debit'],[376.28,'credit'],[1800,'debit']]);
-  assert.deepEqual(result.parsed.rows.map(row=>row.runningBalance),[5439.11,5815.39,4015.39]);
+  assert.deepEqual(result.parsed.rows.map(row=>row.runningBalance),[11900.25,12276.53,10476.53]);
   assert.equal(result.preview.summary.totalDebits,1900);
   assert.equal(result.preview.summary.totalCredits,376.28);
 });

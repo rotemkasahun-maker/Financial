@@ -3,7 +3,7 @@ import { generateId } from '../utils/id.js';
 
 export const ReconciliationRelationship=Object.freeze({SAME_EVENT:'same_event',INTERNAL_TRANSFER:'internal_transfer',REIMBURSEMENT:'reimbursement',DUPLICATE:'duplicate_representation'});
 
-export const createSourceRecord=data=>({id:generateId('source-record'),sourceId:'',externalTransactionId:null,occurredAt:'',amount:0,currency:'ILS',direction:'unknown',counterparty:'',reference:null,rawStatus:'booked',canonicalEventId:null,...data});
+export const createSourceRecord=data=>({id:generateId('source-record'),sourceId:'',externalTransactionId:null,occurredAt:'',amount:0,currency:'ILS',direction:'unknown',counterparty:'',reference:null,sourceAccount:null,postingStatus:'unknown',rawStatus:null,runningBalance:null,canonicalEventId:null,...data});
 export const createCanonicalEvent=data=>{const event={id:generateId('event'),date:'',amount:0,currency:'ILS',financialType:'unclassified',category:null,countInTotals:false,linkedSourceRecordIds:[],...data};if(['transfer','savings_transfer','investment_transfer','capital_allocation','credit_card_settlement'].includes(event.financialType))event.countInTotals=false;return event};
 
 const opposite=(a,b)=>a.direction!==b.direction&&['incoming','credit'].includes(a.direction)!==['incoming','credit'].includes(b.direction);
