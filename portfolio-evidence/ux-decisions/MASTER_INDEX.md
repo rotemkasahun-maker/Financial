@@ -18,7 +18,10 @@ This is the canonical deep-history index. Portfolio UI is a separate editorial l
 | Human/device auth boundary | [human-web-auth-android-device-ingestion-boundary](decisions/human-web-auth-android-device-ingestion-boundary/decision.md) | DEVICE E2E |
 | Shared household state | [shared-canonical-household-state](decisions/shared-canonical-household-state/decision.md) | SYNTHETIC TEST |
 | Financial semantics | [truthful-household-financial-semantics](decisions/truthful-household-financial-semantics/decision.md) | SYNTHETIC TEST |
-| XP/Madrid boundary | [nonfinancial-xp-madrid-goal-boundary](decisions/nonfinancial-xp-madrid-goal-boundary/decision.md) | PROTOTYPE |
+| Human-attention escalation ladder | [human-attention-escalation-ladder](decisions/human-attention-escalation-ladder/decision.md) | SYNTHETIC TEST |
+| Category-level sufficiency under uncertain item identity | [category-level-sufficiency-under-uncertain-item-identity](decisions/category-level-sufficiency-under-uncertain-item-identity/decision.md) | DESIGN DECISION ONLY |
+| Source-agnostic household finance experience | [source-agnostic-household-finance-experience](decisions/source-agnostic-household-finance-experience/decision.md) | SYNTHETIC TEST |
+| XP/Madrid boundary | [nonfinancial-xp-madrid-goal-boundary](decisions/nonfinancial-xp-madrid-goal-boundary/decision.md) | SYNTHETIC TEST |
 | Historical bootstrap | [read-only-historical-learning-bootstrap](decisions/read-only-historical-learning-bootstrap/decision.md) | SYNTHETIC TEST |
 | Gmail receipts | [automated-gmail-receipt-processing](decisions/automated-gmail-receipt-processing/decision.md) | SYNTHETIC TEST |
 | Android companion | [android-companion-not-second-finance-ui](decisions/android-companion-not-second-finance-ui/decision.md) | DEVICE E2E |
@@ -33,5 +36,4 @@ This is the canonical deep-history index. Portfolio UI is a separate editorial l
 - `shared-document-completed-after.png` = `shared-maintenance-client-b-after.png`
 - `shared-maintenance-completed-after.png` = `shared-maintenance-final-attention-after.png`
 
-Missing BEFORE captures must not be reconstructed. `.local/`, device XML, credentials, and real household documents are non-public unless separately reviewed/redacted. Incoming packets remain unprocessed.
-
+Missing BEFORE captures must not be reconstructed. `.local/`, device XML, credentials, and real household documents are non-public unless separately reviewed/redacted. Incoming packets are preserved as provenance and remain non-canonical after semantic merge.
