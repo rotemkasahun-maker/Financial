@@ -4,7 +4,6 @@ node_modules
 private-data
 .local
 tests
-src
 *.csv
 *.xlsx
 *.log

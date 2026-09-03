@@ -26,7 +26,20 @@ export type AiReceiptExtraction = {
   warnings: string[];
 };
 
-const client = new OpenAI();
+let client: OpenAI | null = null;
+
+function getClient(): OpenAI {
+  if (client) return client;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw Object.assign(
+      new Error('AI receipt extraction is unavailable: OPENAI_API_KEY is not configured'),
+      { code: 'ai_credentials_missing' }
+    );
+  }
+  client = new OpenAI({ apiKey });
+  return client;
+}
 
 const receiptSchema = {
   type: 'object',
@@ -141,7 +154,9 @@ export async function extractReceiptWithAi(
     throw new TypeError('extractReceiptWithAi expects non-empty text');
   }
 
-  const response = await client.responses.create({
+  const openai = getClient();
+
+  const response = await openai.responses.create({
     model: 'gpt-5.6-luna',
 
     input: [

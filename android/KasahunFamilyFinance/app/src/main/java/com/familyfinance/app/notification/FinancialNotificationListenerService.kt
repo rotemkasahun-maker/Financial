@@ -7,6 +7,7 @@ import android.util.Log
 import com.familyfinance.app.evidence.FinancialEvidence
 import com.familyfinance.app.evidence.FinancialEvidenceCandidateType
 import com.familyfinance.app.evidence.FinancialEvidencePersistence
+import com.familyfinance.app.evidence.EvidenceSyncWorkScheduler
 import com.familyfinance.app.evidence.FinancialNormalizedData
 
 class FinancialNotificationListenerService : NotificationListenerService() {
@@ -30,7 +31,10 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             postedAt = item.postTime,
             title = title,
             body = body
-        ) ?: return
+        ) ?: run {
+            WalletEventDiagnostic.received(applicationContext, item.postTime, false, "unsupported_or_parse_failure")
+            return
+        }
 
         val evidence = FinancialEvidence(
             sourceType = "notification",
@@ -52,6 +56,15 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         )
 
         val added = FinancialEvidencePersistence.addToQueue(applicationContext, evidence)
+        if (added) EvidenceSyncWorkScheduler.schedule(applicationContext, evidence.externalSourceId)
+        WalletEventDiagnostic.record(applicationContext, org.json.JSONObject()
+            .put("eventAt", parsed.originalTimestamp).put("source", "google_wallet")
+            .put("notificationReceived", true).put("parserDecision", "accepted")
+            .put("reason", "financial_candidate").put("normalizedType", "transaction")
+            .put("externalSourceId", parsed.externalSourceId.take(12))
+            .put("persistence", if (added) "queued" else "duplicate")
+            .put("syncScheduling", if (added) "scheduled" else "not_scheduled_duplicate")
+            .put("receiptExpectation", "not_reached"))
 
         Log.d(
             TAG,

@@ -12,7 +12,8 @@ data class SmsNormalizedData(
     val amount: Double? = null,
     val currency: String? = null,
     val cardLastFour: String? = null,
-    val urls: List<String> = emptyList()
+    val urls: List<String> = emptyList(),
+    val transactionType: String? = null
 )
 
 data class SmsEvidence(
@@ -31,5 +32,6 @@ data class SmsAnalysisResult(
     val candidateType: SmsCandidateType,
     val normalizedData: SmsNormalizedData,
     val evidence: SmsEvidence?,
-    val reason: String
+    val reason: String,
+    val decisionCode: String
 )

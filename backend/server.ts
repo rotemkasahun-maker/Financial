@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { readFile, stat } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
 
 import { loadConfig } from './config.ts';
 import { signState, verifyState } from './crypto.ts';
@@ -44,6 +46,8 @@ import {
   ImportPipeline
 } from '../src/shared/importPipeline.js';
 import { createAuth } from './auth.ts';
+import { WriteFreezeController } from './writeFreeze.ts';
+import { GoogleSheetsSourceReader, buildDryRunReport, adaptExpensesSheetRows, adaptBankSheetRows, adaptIncomeSheetRows, adaptEvidenceRows, adaptReviewRows, reconcileDryRun, buildCandidateInventory, reconcileCandidates, compareRerunIdentities, semanticDiagnostics, finalSafeImportSummary, buildFinalSafeCandidates, blockerDiagnostics } from './googleSheetsIngestion.ts';
 
 const json = (res, status, value) => {
   res.writeHead(status, {
@@ -52,7 +56,7 @@ const json = (res, status, value) => {
     'Cache-Control':
       'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, If-Match',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Household-Session, Idempotency-Key, If-Match',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS'
   });
 
@@ -83,6 +87,16 @@ const body = async req => {
       '{}'
   );
 };
+
+const webRoot = process.cwd();
+const webTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml' };
+async function serveWeb(res, pathname) {
+  const requested = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const candidate = normalize(join(webRoot, requested));
+  const fallback = normalize(join(webRoot, 'index.html'));
+  const file = candidate.startsWith(webRoot) ? candidate : fallback;
+  try { const info = await stat(file); if (!info.isFile()) throw new Error('not_file'); const bytes = await readFile(file); res.writeHead(200, { 'Content-Type': webTypes[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); return res.end(bytes); } catch { if (pathname !== '/' && !pathname.startsWith('/api/')) { const bytes = await readFile(fallback); res.writeHead(200, { 'Content-Type': webTypes['.html'], 'Cache-Control': 'no-store' }); return res.end(bytes); } return json(res, 404, { error: 'not_found' }); }
+}
 
 const binaryBody = async (
   req,
@@ -127,10 +141,11 @@ export function createBackend({
     config || loadConfig();
 
   const auth = config.authSigningSecret ? createAuth(config) : null;
+  const freezeController = new WriteFreezeController();
 
   repository =
     repository ||
-    createStateRepository(config);
+    createStateRepository(config, freezeController);
 
   gmail =
     gmail ||
@@ -145,10 +160,11 @@ export function createBackend({
     !financeDataService &&
     config.stateEncryptionKey
   ) {
-    financeRepository =
+      financeRepository =
       financeRepository ||
       createFinanceStateRepository(
-        config
+        config,
+        freezeController
       );
 
     financeDataService =
@@ -201,6 +217,8 @@ export function createBackend({
       syncRepository: repository
     });
 
+  const sheetsReader = new GoogleSheetsSourceReader();
+
   return createServer(
     async (req, res) => {
       try {
@@ -213,7 +231,7 @@ export function createBackend({
         if (req.method === 'OPTIONS') {
           res.writeHead(204, {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, If-Match',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Household-Session, Idempotency-Key, If-Match',
             'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS'
           });
           return res.end();
@@ -233,11 +251,67 @@ export function createBackend({
           catch { return json(res, 401, { error: 'unauthorized' }); }
         }
 
+        if (url.pathname === '/internal/write-freeze') {
+          if (!auth || !config.writeFreezeToken || req.headers['x-internal-token'] !== config.writeFreezeToken) return json(res, 401, { error: 'unauthorized' });
+          try { auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          if (req.method === 'GET') return json(res, 200, { mode: freezeController.status() });
+          if (req.method === 'POST') {
+            const payload = await body(req);
+            if (payload.mode === 'WRITE_FROZEN') freezeController.freeze();
+            else if (payload.mode === 'NORMAL') freezeController.release();
+            else return json(res, 400, { error: 'invalid_mode' });
+            return json(res, 200, { mode: freezeController.status() });
+          }
+          return json(res, 405, { error: 'method_not_allowed' });
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/maintenance/state') {
+          if (!auth || !financeDataService) return json(res, 401, { error: 'unauthorized' });
+          let context;
+          try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          return json(res, 200, await financeDataService.getMaintenanceState(context));
+        }
+
         if (url.pathname.startsWith('/api/finance/')) {
           if (!auth || !financeDataService) return json(res, 401, { error: 'unauthorized' });
           let context;
           try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          if (req.method === 'POST' && url.pathname === '/api/finance/google-sheets/dry-run') {
+            const payload = await body(req);
+            const startDate = String(payload.startDate || '');
+            const endDate = String(payload.endDate || '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) return json(res, 400, { error: 'invalid_period' });
+            try {
+              const tabs = await sheetsReader.readRequiredTabs();
+              const sourceRowsByTab = Object.fromEntries(tabs.map(item => [item.tab, Math.max(0, item.rows.length - 1)]));
+              const expenseTab = tabs.find(item => item.tab === 'הוצאות');
+              const report = buildDryRunReport({ rows: expenseTab?.rows || [], startDate, endDate });
+              const bank = adaptBankSheetRows(tabs.find(item => item.tab === 'תנועות בנק')?.rows || []);
+              const income = adaptIncomeSheetRows(tabs.find(item => item.tab === 'הכנסות')?.rows || []);
+              const micro = adaptEvidenceRows(tabs.find(item => item.tab === 'קבלות - מיקרו')?.rows || [], 'קבלות - מיקרו');
+              const email = adaptEvidenceRows(tabs.find(item => item.tab === 'קבלות מהמייל')?.rows || [], 'קבלות מהמייל');
+              const review = adaptReviewRows(tabs.find(item => item.tab === 'לבדיקה')?.rows || []);
+              const expense = adaptExpensesSheetRows(expenseTab?.rows || []).rows.filter((row: any) => row.date >= startDate && row.date <= endDate);
+              const candidates = [...expense, ...bank.rows.filter((row: any) => row.date >= startDate && row.date <= endDate), ...income.rows.filter((row: any) => row.date >= startDate && row.date <= endDate)].filter((row: any) => row.valid !== false && !row.reviewRequired && !row.excluded);
+              const canonical = await financeRepository?.read?.() || { transactions: [] };
+              const crossSource = reconcileCandidates(candidates); const finalRows = candidates.filter((row: any) => !crossSource.suppressedIdentities.includes(row.externalSourceId)); const safeRows = buildFinalSafeCandidates(finalRows);
+              const semanticDiag = blockerDiagnostics(candidates);
+              const malformedCount = report.malformedRows + bank.malformed + income.malformed;
+              const malformedDiagnostics = Array.from({ length: malformedCount }, (_, index) => ({ stableSourceIdentity: null, sourceTab: index < report.malformedRows ? 'הוצאות' : index < report.malformedRows + bank.malformed ? 'תנועות בנק' : 'הכנסות', reasonCode: 'required_field_invalid', classification: 'financial' }));
+              const excluded = { postReconciliationCandidates: finalRows.length, reviewExcluded: candidates.filter((row: any) => row.reviewRequired).length, semanticUnresolvedExcluded: candidates.filter((row: any) => row.unsafeSemantic || !row.financialType).length, malformedExcluded: malformedCount, pendingExcluded: candidates.filter((row: any) => row.financialType === 'reimbursement' && row.reimbursementStatus !== 'received').length, otherUnsafeExcluded: 0, uniqueExcludedCount: finalRows.length - safeRows.length, finalSafeImportCount: safeRows.length };
+              return json(res, 200, { sourceRowsByTab, transactionCandidatesByTab: { 'הוצאות': report.sourceRows, 'תנועות בנק': bank.rows.filter((row: any) => row.date >= startDate && row.date <= endDate).length, 'הכנסות': income.rows.filter((row: any) => row.date >= startDate && row.date <= endDate).length }, evidenceRowsByTab: { 'קבלות - מיקרו': micro.rows.length, 'קבלות מהמייל': email.rows.length }, reviewRowsByTab: { 'לבדיקה': review.rows.length }, ...report, semanticDiagnostics: semanticDiag, malformedDiagnostics, pendingReimbursementDiagnostics: candidates.filter((row: any) => ['reimbursement','refund'].includes(row.financialType)).map((row: any) => ({ stableSourceIdentity: row.externalSourceId, sourceTab: row.sourceType, reimbursementStatus: row.reimbursementStatus || 'unknown', postingStatus: row.postingStatus || 'unknown', safeForAutomaticImport: row.reimbursementStatus === 'received', reasonCode: row.reimbursementStatus === 'received' ? 'received' : 'status_unproven' })), malformedFinancialRows: malformedCount, exclusionSummary: excluded, reconciliation: { remote: reconcileDryRun(candidates, canonical), crossSource }, candidateInventory: buildCandidateInventory(candidates, [...micro.rows, ...email.rows]), rerunIdentity: compareRerunIdentities(safeRows, safeRows), finalSafeImport: finalSafeImportSummary(safeRows), provenance: { stableIds: true, duplicateIds: false }, validationSafety: { financeImportCalls: 0, canonicalStateWrites: 0, sheetWrites: 0, dryRunReadOnly: true } });
+            } catch { return json(res, 502, { error: 'sheets_dry_run_failed' }); }
+          }
+          if (req.method === 'POST' && url.pathname === '/api/finance/google-sheets/historical-import') {
+            const payload = await body(req); const period = String(payload.period || ''); const expectedHash = String(payload.expectedHash || '');
+            const windows: any = { '2026-06': ['2026-06-01','2026-06-30'], '2026-07': ['2026-07-01','2026-07-31'], '2026-08': ['2026-08-01','2026-08-31'] }; if (!windows[period]) return json(res, 400, { error: 'invalid_period' });
+            const [startDate,endDate] = windows[period]; const tabs = await sheetsReader.readRequiredTabs(); const expense = adaptExpensesSheetRows(tabs.find(item=>item.tab==='הוצאות')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const bank=adaptBankSheetRows(tabs.find(item=>item.tab==='תנועות בנק')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const income=adaptIncomeSheetRows(tabs.find(item=>item.tab==='הכנסות')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const candidates=[...expense,...bank,...income].filter((row:any)=>row.valid!==false&&!row.reviewRequired&&!row.excluded); const cross=reconcileCandidates(candidates); const safe=buildFinalSafeCandidates(candidates.filter((row:any)=>!cross.suppressedIdentities.includes(row.externalSourceId))); const summary=finalSafeImportSummary(safe); if(expectedHash&&summary.finalSafeCandidateIdentityHash!==expectedHash)return json(res,409,{error:'safe_set_changed'}); const result=await financeDataService.importRows(safe,context); return json(res,200,{period,safeCount:safe.length,finalSafeCandidateIdentityHash:summary.finalSafeCandidateIdentityHash,imported:result?.imported||0,duplicates:result?.duplicates||0});
+          }
           if (req.method === 'GET' && url.pathname === '/api/finance/state') return json(res, 200, await financeDataService.getHouseholdState(context));
+          if (req.method === 'GET' && url.pathname.startsWith('/api/finance/evidence-status/')) {
+            const externalSourceId = decodeURIComponent(url.pathname.split('/').pop());
+            return json(res, 200, await ingestionService.getEvidenceReceiptStatus(externalSourceId, context));
+          }
           if (req.method === 'POST' && url.pathname.startsWith('/api/finance/tasks/')) { const id = decodeURIComponent(url.pathname.split('/')[4]); try { return json(res, 200, await financeDataService.completeTask(id, context)); } catch (error) { if (error.code === 'not_found') return json(res, 404, { error: 'not_found' }); throw error; } }
           if (req.method === 'POST' && url.pathname.startsWith('/api/finance/expected-documents/') && url.pathname.endsWith('/receive')) { const id = decodeURIComponent(url.pathname.split('/')[4]); try { return json(res, 200, await financeDataService.receiveExpectedDocument(id, context)); } catch (error) { if (error.code === 'not_found') return json(res, 404, { error: 'not_found' }); throw error; } }
           if (req.method === 'PATCH' && url.pathname.startsWith('/api/finance/transactions/')) {
@@ -260,6 +334,8 @@ export function createBackend({
           req.method === 'GET' &&
           (
             url.pathname === '/' ||
+            url.pathname ===
+              '/health' ||
             url.pathname ===
               '/healthz'
           )
@@ -309,8 +385,19 @@ export function createBackend({
             );
           }
 
+          let householdContext = null;
+          const householdSession = String(req.headers['x-household-session'] || '');
+          if (householdSession) {
+            if (!auth) return json(res, 401, { error: 'household_auth_unavailable' });
+            try {
+              householdContext = auth.authenticateRequest({ headers: { authorization: `Bearer ${householdSession}`, 'x-device-id': req.headers['x-device-id'] || null } });
+            } catch {
+              return json(res, 401, { error: 'invalid_household_session' });
+            }
+          }
+
           const payload = await body(req);
-          const result = await ingestionService.processEvidence(payload);
+          const result = await ingestionService.processEvidence(payload, householdContext);
 
           return json(res, 200, result);
         }
@@ -782,6 +869,8 @@ export function createBackend({
           );
         }
 
+        if (req.method === 'GET') return serveWeb(res, url.pathname);
+
         return json(
           res,
           404,
@@ -824,6 +913,8 @@ export function createBackend({
           error.code ===
             'oauth_revoked'
             ? 401
+            : error.code === 'WRITE_FROZEN'
+              ? 423
             : error.code ===
                 'document_too_large'
               ? 413

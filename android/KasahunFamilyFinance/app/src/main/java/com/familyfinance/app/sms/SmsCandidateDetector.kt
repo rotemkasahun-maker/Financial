@@ -3,6 +3,11 @@ package com.familyfinance.app.sms
 
 object SmsCandidateDetector {
 
+    data class Decision(
+        val candidateType: SmsCandidateType,
+        val reasonCode: String
+    )
+
     private val urlRegex =
         Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
 
@@ -17,6 +22,7 @@ object SmsCandidateDetector {
         "חיוב",
         "זיכוי",
         "העברה",
+        "העברת",
         "הועבר",
         "התקבל",
         "תשלום",
@@ -38,6 +44,7 @@ object SmsCandidateDetector {
 
     private val otpKeywords = listOf(
         "קוד אימות",
+        "קוד האימות",
         "קוד חד פעמי",
         "קוד אבטחה",
         "otp",
@@ -45,17 +52,19 @@ object SmsCandidateDetector {
         "security code"
     )
 
-    fun detect(body: String): SmsCandidateType {
+    fun detect(body: String): SmsCandidateType = decide(body).candidateType
+
+    fun decide(body: String): Decision {
         val text = body.trim()
 
         if (text.isBlank()) {
-            return SmsCandidateType.NOISE
+            return Decision(SmsCandidateType.NOISE, "EMPTY_BODY")
         }
 
         val lower = text.lowercase()
 
         if (otpKeywords.any { lower.contains(it) }) {
-            return SmsCandidateType.NOISE
+            return Decision(SmsCandidateType.NOISE, "SECURITY_CODE")
         }
 
         val hasUrl = urlRegex.containsMatchIn(text)
@@ -63,7 +72,7 @@ object SmsCandidateDetector {
             documentKeywords.any { lower.contains(it) }
 
         if (hasUrl && hasDocumentKeyword) {
-            return SmsCandidateType.RECEIPT_LINK
+            return Decision(SmsCandidateType.RECEIPT_LINK, "DOCUMENT_LINK")
         }
 
         val hasAmount = amountRegex.containsMatchIn(text)
@@ -71,13 +80,13 @@ object SmsCandidateDetector {
             financialKeywords.any { lower.contains(it) }
 
         if (hasAmount && hasFinancialKeyword) {
-            return SmsCandidateType.TRANSACTION
+            return Decision(SmsCandidateType.TRANSACTION, "AMOUNT_AND_FINANCIAL_KEYWORD")
         }
 
         if (hasUrl || hasAmount || hasFinancialKeyword) {
-            return SmsCandidateType.AMBIGUOUS
+            return Decision(SmsCandidateType.AMBIGUOUS, "PARTIAL_FINANCIAL_SIGNAL")
         }
 
-        return SmsCandidateType.NOISE
+        return Decision(SmsCandidateType.NOISE, "UNSUPPORTED_NO_FINANCIAL_SIGNAL")
     }
 }

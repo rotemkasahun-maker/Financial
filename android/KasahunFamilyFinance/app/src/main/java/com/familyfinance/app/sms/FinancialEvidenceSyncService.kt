@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.familyfinance.app.evidence.FinancialEvidence
 import com.familyfinance.app.evidence.FinancialEvidencePersistence
+import com.familyfinance.app.receipt.ReceiptReminderScheduler
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -14,7 +15,8 @@ data class FinancialSyncResult(
 )
 
 class FinancialEvidenceSyncService(
-    private val client: FinancialEvidenceSyncClient
+    private val client: FinancialEvidenceSyncClient,
+    private val scheduleReceiptCheck: (Context, FinancialEvidence) -> Unit = ReceiptReminderScheduler::schedule
 ) {
     fun syncEvidenceQueue(context: Context): FinancialSyncResult {
         val queue = FinancialEvidencePersistence.getQueue(context)
@@ -27,6 +29,7 @@ class FinancialEvidenceSyncService(
         for (evidence in queue) {
             val success = client.sendEvidence(mapToPayload(evidence))
             if (success) {
+                scheduleReceiptCheck(context, evidence)
                 FinancialEvidencePersistence.removeFromQueue(context, evidence.externalSourceId)
                 successCount++
             } else {

@@ -1,0 +1,7 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, Dockerfile.web, -t, europe-west1-docker.pkg.dev/project-343999a8-f375-4c7d-aad/cloud-run-source-deploy/family-finance-web:alpha-20260903, .]
+  - name: gcr.io/cloud-builders/docker
+    args: [push, europe-west1-docker.pkg.dev/project-343999a8-f375-4c7d-aad/cloud-run-source-deploy/family-finance-web:alpha-20260903]
+images:
+  - europe-west1-docker.pkg.dev/project-343999a8-f375-4c7d-aad/cloud-run-source-deploy/family-finance-web:alpha-20260903

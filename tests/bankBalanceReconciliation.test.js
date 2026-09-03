@@ -16,14 +16,14 @@ const bankMovement=(id,date,amount,direction,extra={})=>({
 
 test('synthetic posted movements reconcile exactly when coverage is complete',()=>{
   const movements=[
-    bankMovement('qa-primary-1','2026-08-16',410,'debit',{financialType:'expense',reimbursementExpected:true}),
-    bankMovement('qa-primary-2','2026-08-18',275,'debit',{financialType:'expense',reimbursementExpected:true}),
-    bankMovement('qa-primary-3','2026-08-19',80,'credit',{financialType:'government_benefit'}),
-    bankMovement('qa-primary-4','2026-08-28',450,'debit',{financialType:'transfer',countInTotals:false})
+    bankMovement('qa-primary-1','2031-04-05',410,'debit',{financialType:'expense',reimbursementExpected:true}),
+    bankMovement('qa-primary-2','2031-04-08',275,'debit',{financialType:'expense',reimbursementExpected:true}),
+    bankMovement('qa-primary-3','2031-04-11',80,'credit',{financialType:'government_benefit'}),
+    bankMovement('qa-primary-4','2031-04-17',455,'debit',{financialType:'transfer',countInTotals:false})
   ];
-  const result=reconcilePostedBankMovements({anchorBalance:12000.25,anchorDate:'2026-08-10',account:'qa-account-primary',movements,laterVerifiedBalance:10945.25});
-  assert.equal(result.postedDelta,-1055);
-  assert.equal(result.postedBalance,10945.25);
+  const result=reconcilePostedBankMovements({anchorBalance:12000.25,anchorDate:'2031-04-01',account:'qa-account-primary',movements,laterVerifiedBalance:10940.25});
+  assert.equal(result.postedDelta,-1060);
+  assert.equal(result.postedBalance,10940.25);
   assert.equal(result.verifiedDifference,0);
   assert.equal(result.reconciliationStatus,'pass');
   assert.equal(result.hasCoverageGaps,false);
@@ -31,11 +31,11 @@ test('synthetic posted movements reconcile exactly when coverage is complete',()
 
 test('synthetic posted reconciliation excludes a pending live difference and reports uncertainty',()=>{
   const movements=[
-    bankMovement('qa-secondary-1','2026-08-13',625,'debit',{sourceAccount:'qa-account-secondary'}),
-    bankMovement('qa-secondary-2','2026-08-14',180,'debit',{sourceAccount:'qa-account-secondary'}),
-    bankMovement('qa-secondary-pending','2026-08-28',73,'debit',{sourceAccount:'qa-account-secondary',postingStatus:'pending',rawStatus:'תנועה מהיום'})
+    bankMovement('qa-secondary-1','2032-05-04',625,'debit',{sourceAccount:'qa-account-secondary'}),
+    bankMovement('qa-secondary-2','2032-05-09',180,'debit',{sourceAccount:'qa-account-secondary'}),
+    bankMovement('qa-secondary-pending','2032-05-21',73,'debit',{sourceAccount:'qa-account-secondary',postingStatus:'pending',rawStatus:'תנועה מהיום'})
   ];
-  const result=reconcilePostedBankMovements({anchorBalance:8000.50,anchorDate:'2026-08-12',account:'qa-account-secondary',movements,laterVerifiedBalance:7195.50,observedLiveBalance:7122.50});
+  const result=reconcilePostedBankMovements({anchorBalance:8000.50,anchorDate:'2032-05-01',account:'qa-account-secondary',movements,laterVerifiedBalance:7195.50,observedLiveBalance:7122.50});
   assert.equal(result.postedBalance,7195.50);
   assert.equal(result.verifiedDifference,0);
   assert.equal(result.liveDifference,-73);
@@ -45,16 +45,16 @@ test('synthetic posted reconciliation excludes a pending live difference and rep
 
 test('bank impact uses account, posting status and direction rather than economic classification',()=>{
   const movements=[
-    bankMovement('out','2026-08-16',420,'debit',{financialType:'transfer',countInTotals:false}),
-    bankMovement('reimbursement','2026-08-20',180,'credit',{financialType:'reimbursement',linkedTransactionId:'out'}),
-    bankMovement('unknown-status','2026-08-21',17,'debit',{postingStatus:'unknown'}),
-    bankMovement('missing-account','2026-08-22',23,'debit',{sourceAccount:null}),
-    bankMovement('wrong-account','2026-08-23',31,'debit',{sourceAccount:'qa-account-other'}),
-    bankMovement('unknown-direction','2026-08-24',47,'unknown'),
-    bankMovement('duplicate','2026-08-25',60,'debit'),
-    bankMovement('duplicate-copy','2026-08-25',60,'debit',{externalSourceId:'duplicate'})
+    bankMovement('out','2033-06-03',420,'debit',{financialType:'transfer',countInTotals:false}),
+    bankMovement('reimbursement','2033-06-07',180,'credit',{financialType:'reimbursement',linkedTransactionId:'out'}),
+    bankMovement('unknown-status','2033-06-09',17,'debit',{postingStatus:'unknown'}),
+    bankMovement('missing-account','2033-06-11',23,'debit',{sourceAccount:null}),
+    bankMovement('wrong-account','2033-06-13',31,'debit',{sourceAccount:'qa-account-other'}),
+    bankMovement('unknown-direction','2033-06-15',47,'unknown'),
+    bankMovement('duplicate','2033-06-17',60,'debit'),
+    bankMovement('duplicate-copy','2033-06-17',60,'debit',{externalSourceId:'duplicate'})
   ];
-  const result=reconcilePostedBankMovements({anchorBalance:1500,anchorDate:'2026-08-10',account:'qa-account-primary',movements});
+  const result=reconcilePostedBankMovements({anchorBalance:1500,anchorDate:'2033-06-01',account:'qa-account-primary',movements});
   assert.equal(result.postedBalance,1200);
   assert.deepEqual(result.coverageGaps.map(gap=>gap.type),['unknown_posting_status','missing_account','account_mismatch','unknown_direction','duplicate_movement']);
   assert.equal(calculateSummary(movements).balance,180);

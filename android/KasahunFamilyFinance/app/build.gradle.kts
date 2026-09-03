@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -30,8 +31,26 @@ android {
         val connectorToken = providers.gradleProperty("FAMILY_FINANCE_CONNECTOR_TOKEN")
             .orElse(localProperties.getProperty("familyFinanceConnectorToken", "local-test-token"))
             .get()
+        val webUrl = providers.gradleProperty("FAMILY_FINANCE_WEB_URL")
+            .orElse(localProperties.getProperty("familyFinanceWebUrl", ""))
+            .map { configured ->
+                configured.ifBlank {
+                    val backend = URI(backendUrl)
+                    URI(backend.scheme, null, backend.host, 4173, null, null, null).toString()
+                }
+            }
+            .get()
+        val householdUser = providers.gradleProperty("FAMILY_FINANCE_HOUSEHOLD_USER")
+            .orElse(localProperties.getProperty("familyFinanceHouseholdUser", ""))
+            .get()
+        val householdCredential = providers.gradleProperty("FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL")
+            .orElse(localProperties.getProperty("familyFinanceHouseholdCredential", ""))
+            .get()
         buildConfigField("String", "FAMILY_FINANCE_BACKEND_URL", "\"$backendUrl\"")
         buildConfigField("String", "FAMILY_FINANCE_CONNECTOR_TOKEN", "\"$connectorToken\"")
+        buildConfigField("String", "FAMILY_FINANCE_WEB_URL", "\"$webUrl\"")
+        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_USER", "\"$householdUser\"")
+        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL", "\"$householdCredential\"")
     }
 
     buildTypes {
@@ -60,6 +79,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.work.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

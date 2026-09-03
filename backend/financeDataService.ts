@@ -55,6 +55,25 @@ export class BackendFinanceDataService {
     );
   }
 
+  async getTransactionReceiptState(
+    transactionId: string,
+    context: any
+  ) {
+    const state = await this.repository.read();
+    const transaction = state.transactions.find(
+      item =>
+        item.id === transactionId &&
+        item.householdId === context.householdId
+    );
+
+    if (!transaction) return null;
+
+    return {
+      transactionId: transaction.id,
+      receiptPresent: Boolean(transaction.receiptId)
+    };
+  }
+
   async getHouseholdState(context: any) {
     const state = await this.repository.update(async current => { await this.ensureMaintenance(current, new Date(), context); return current; });
     return structuredClone({
@@ -64,6 +83,15 @@ export class BackendFinanceDataService {
       expectedDocuments: state.expectedDocuments.filter(item => !item.householdId || item.householdId === context.householdId),
       rewardEvents: state.rewardEvents
     });
+  }
+
+  async getMaintenanceState(context: any) {
+    const state = await this.getHouseholdState(context);
+    const tasks = state.tasks.filter((item: any) => item.status !== 'completed');
+    const expectedDocuments = state.expectedDocuments.filter((item: any) => item.status !== 'completed' && !item.received);
+    const priorities: Record<string, number> = { high: 3, normal: 2, low: 1 };
+    const highest = [...tasks].sort((a: any, b: any) => (priorities[b.priority] || 0) - (priorities[a.priority] || 0))[0];
+    return { tasks, expectedDocuments, attention: { openCount: tasks.length, highestPriority: highest?.priority || null, roughEffortMinutes: Math.max(0, Math.ceil(tasks.reduce((sum: number, item: any) => sum + (item.type === 'expected_document' ? 1 : 0.5), 0))) }, updatedAt: new Date().toISOString() };
   }
 
   async ensureMaintenance(state: any, now = new Date(), context: any = null) {
@@ -78,7 +106,7 @@ export class BackendFinanceDataService {
       let doc = state.expectedDocuments.find((item: any) => item.id === id);
       if (!doc) { doc = { id, householdId: context?.householdId || null, documentType: rule.type, period, dueDate: `${period}-${String(rule.day).padStart(2, '0')}`, received: false, status: 'open' }; state.expectedDocuments.push(doc); }
       const key = `expected_document:${id}`;
-      if (!doc.received && !state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || doc.householdId || null, type: 'expected_document', dedupeKey: key, relatedRecordId: id, title: rule.title, status: 'open', priority: 'high', xpReward: 15 });
+      if (!doc.received && !state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || doc.householdId || null, type: 'expected_document', dedupeKey: key, relatedRecordId: id, title: rule.title, explanation: `${rule.type} — ${period} עדיין חסר`, status: 'open', priority: 'high', xpReward: 15, deepLink: { route: 'document_upload', params: { documentId: id } } });
     }
     for (const tx of state.transactions.filter((item: any) => item.financialType === 'expense' && !item.receiptId)) {
       const key = `missing_receipt:${tx.id}`;
@@ -177,11 +205,20 @@ export class BackendFinanceDataService {
         const normalizedReceipt =
           normalizeReceipt(receipt);
 
-        const existing =
+        let existing =
           findExistingReceipt(
             state.receipts,
             normalizedReceipt
           );
+
+        if (
+          existing &&
+          linkedTransactionId &&
+          existing.linkedTransactionId &&
+          existing.linkedTransactionId !== linkedTransactionId
+        ) {
+          existing = null;
+        }
 
         if (existing) {
           mergeSourceRepresentation(

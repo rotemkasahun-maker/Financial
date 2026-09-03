@@ -5,6 +5,10 @@ export const FinancialType = Object.freeze({
   CREDIT_CARD_SETTLEMENT:'credit_card_settlement', SAVINGS_TRANSFER: 'savings_transfer', INVESTMENT_TRANSFER: 'investment_transfer', CAPITAL_ALLOCATION: 'capital_allocation'
 });
 
+export const PostingStatus = Object.freeze({
+  POSTED: 'posted', PENDING: 'pending', UNKNOWN: 'unknown'
+});
+
 export const createReceipt = (data) => ({
   id: generateId('receipt'), fileUrl: '', fileType: 'image', merchant: '', purchaseDate: '',
   total: 0, currency: 'ILS', paymentMethod: '', extractionStatus: 'pending',
@@ -22,4 +26,4 @@ export const createExpectedDocument = data => ({id:generateId('document'),docume
 export const createImportIssue = data => ({id:generateId('issue'),type:'unknown',severity:'warning',title:'',description:'',sourceId:null,status:'open',createdAt:new Date().toISOString(),...data});
 export const createReminderTask = data => ({id:generateId('reminder'),type:'manual_followup',title:'',period:null,dueDate:null,status:'upcoming',notifyAndroidLater:true,...data});
 export const createCanonicalFinancialEvent = data => {const event={id:generateId('event'),date:'',amount:0,currency:'ILS',financialType:'unclassified',countInTotals:false,linkedSourceRecordIds:[],createdAt:new Date().toISOString(),...data};if(['transfer','credit_card_settlement','savings_transfer','investment_transfer','capital_allocation'].includes(event.financialType))event.countInTotals=false;return event};
-export const createFinancialSourceRecord = data => ({id:generateId('source-record'),sourceId:'',sourceType:'',externalTransactionId:null,occurredAt:'',amount:0,currency:'ILS',direction:'unknown',canonicalEventId:null,importedAt:new Date().toISOString(),...data});
+export const createFinancialSourceRecord = data => ({id:generateId('source-record'),sourceId:'',sourceType:'',externalTransactionId:null,occurredAt:'',amount:0,currency:'ILS',direction:'unknown',sourceAccount:null,postingStatus:PostingStatus.UNKNOWN,rawStatus:null,runningBalance:null,canonicalEventId:null,importedAt:new Date().toISOString(),...data});

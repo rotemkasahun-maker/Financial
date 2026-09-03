@@ -7,6 +7,7 @@ import {
   decryptJson,
   encryptJson
 } from './crypto.ts';
+import {WriteFreezeController} from './writeFreeze.ts';
 
 export type FinanceState = {
   version: number;
@@ -36,6 +37,7 @@ export class FinanceStateRepository {
   constructor({
     blobStore,
     encryptionKey
+    ,freezeController = new WriteFreezeController()
   }: {
     blobStore: {
       read(): Promise<Buffer | null>;
@@ -45,6 +47,7 @@ export class FinanceStateRepository {
   }) {
     this.blobStore = blobStore;
     this.encryptionKey = encryptionKey;
+    this.freezeController = freezeController;
   }
 
   async read(): Promise<FinanceState> {
@@ -69,6 +72,7 @@ export class FinanceStateRepository {
   async write(
     state: FinanceState
   ): Promise<void> {
+    this.freezeController.assertWritable();
     const normalized =
       normalizeFinanceState(state);
 
@@ -85,6 +89,7 @@ export class FinanceStateRepository {
       state: FinanceState
     ) => Promise<T> | T
   ): Promise<T> {
+    this.freezeController.assertWritable();
     const state =
       await this.read();
 
@@ -125,7 +130,7 @@ function normalizeFinanceState(
 }
 
 export function createFinanceStateRepository(
-  config: any
+  config: any, freezeController?: WriteFreezeController
 ) {
   if (
     !config?.stateEncryptionKey
@@ -150,6 +155,7 @@ export function createFinanceStateRepository(
   return new FinanceStateRepository({
     blobStore,
     encryptionKey:
-      config.stateEncryptionKey
+      config.stateEncryptionKey,
+    freezeController
   });
 }

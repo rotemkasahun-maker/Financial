@@ -15,6 +15,10 @@ class MockFinanceDataService {
   }
   async getTransactions() { return this.transactions; }
   async linkEvidence(id, evidence) { this.links.push({ id, evidence }); }
+  async getTransactionReceiptState(id, context) {
+    const transaction = this.transactions.find(item => item.id === id && item.householdId === context.householdId);
+    return transaction ? { transactionId: transaction.id, receiptPresent: Boolean(transaction.receiptId) } : null;
+  }
 }
 
 test('FinanceIngestionService tracks idempotency', async () => {
@@ -119,4 +123,79 @@ test('staged SMS can be reviewed without changing financial state', async () => 
   assert.equal(result.status, 'resolved');
   assert.equal(data.links.length, 0);
   assert.equal(syncRepo.state.staging['sms-4'].resolution, 'reviewed');
+});
+
+test('authoritative evidence status follows the durable transaction receipt state', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const transaction = {
+    id: 'tx-status', householdId: 'household-a', date: '2026-08-20', merchant: 'Test Merchant',
+    amount: 100, financialType: 'expense', receiptId: null
+  };
+  const service = new FinanceIngestionService({
+    dataService: new MockFinanceDataService([transaction]),
+    syncRepository: syncRepo
+  });
+  const evidence = {
+    externalSourceId: 'status-1', sourceType: 'notification', candidateType: 'TRANSACTION',
+    originalSmsTimestamp: 1777000000000,
+    normalized: { merchant: 'Test Merchant', date: '2026-08-20', amount: 100 }
+  };
+  const context = { householdId: 'household-a', userId: 'user-a' };
+
+  assert.equal((await service.processEvidence(evidence, context)).transactionId, 'tx-status');
+  assert.deepEqual(await service.getEvidenceReceiptStatus('status-1', context), {
+    externalSourceId: 'status-1', ingestionStatus: 'resolved', durableResult: 'linked_automatically',
+    transactionId: 'tx-status', receiptStatus: 'absent', receiptPresent: false
+  });
+
+  transaction.receiptId = 'receipt-1';
+  assert.deepEqual(await service.getEvidenceReceiptStatus('status-1', context), {
+    externalSourceId: 'status-1', ingestionStatus: 'resolved', durableResult: 'linked_automatically',
+    transactionId: 'tx-status', receiptStatus: 'present', receiptPresent: true
+  });
+});
+
+test('pending and unknown evidence never resolve to receipt absent', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const service = new FinanceIngestionService({ dataService: new MockFinanceDataService(), syncRepository: syncRepo });
+  const context = { householdId: 'household-a', userId: 'user-a' };
+  await service.processEvidence({
+    externalSourceId: 'pending-1', sourceType: 'android_sms', candidateType: 'AMBIGUOUS', originalSmsTimestamp: 1
+  }, context);
+
+  const pending = await service.getEvidenceReceiptStatus('pending-1', context);
+  assert.equal(pending.ingestionStatus, 'pending');
+  assert.equal(pending.receiptStatus, 'unknown');
+  assert.equal(pending.receiptPresent, null);
+
+  const unknown = await service.getEvidenceReceiptStatus('unknown-1', context);
+  assert.equal(unknown.ingestionStatus, 'not_found');
+  assert.equal(unknown.receiptStatus, 'unknown');
+  assert.equal(unknown.receiptPresent, null);
+});
+
+test('duplicate ingestion keeps one durable result and household isolation hides it', async () => {
+  const syncRepo = new MockRepository({ processedEvidence: {}, staging: {} });
+  const transaction = {
+    id: 'tx-dedupe', householdId: 'household-a', date: '2026-08-20', merchant: 'Test Merchant',
+    amount: 100, financialType: 'expense', receiptId: null
+  };
+  const service = new FinanceIngestionService({
+    dataService: new MockFinanceDataService([transaction]),
+    syncRepository: syncRepo
+  });
+  const evidence = {
+    externalSourceId: 'dedupe-1', sourceType: 'notification', candidateType: 'TRANSACTION', originalSmsTimestamp: 1,
+    normalized: { merchant: 'Test Merchant', date: '2026-08-20', amount: 100 }
+  };
+  const householdA = { householdId: 'household-a', userId: 'user-a' };
+  const householdB = { householdId: 'household-b', userId: 'user-b' };
+
+  assert.equal((await service.processEvidence(evidence, householdA)).status, 'linked_automatically');
+  assert.equal((await service.processEvidence(evidence, householdA)).status, 'already_processed');
+  assert.equal((await service.getEvidenceReceiptStatus('dedupe-1', householdA)).transactionId, 'tx-dedupe');
+  const isolated = await service.getEvidenceReceiptStatus('dedupe-1', householdB);
+  assert.equal(isolated.ingestionStatus, 'not_found');
+  assert.equal(isolated.receiptStatus, 'unknown');
+  assert.equal(isolated.transactionId, null);
 });

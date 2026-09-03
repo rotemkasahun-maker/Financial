@@ -21,10 +21,11 @@ object SmsPersistence {
         return (prefs.getStringSet(PROCESSED_HASHES_KEY, emptySet()) ?: emptySet()).contains(hash)
     }
 
-    fun addToQueue(context: Context, evidence: SmsEvidence) {
+    fun addToQueue(context: Context, evidence: SmsEvidence): Boolean {
         migrateLegacyQueueIfNeeded(context)
-        FinancialEvidencePersistence.addToQueue(context, evidence.toFinancialEvidence())
+        val added = FinancialEvidencePersistence.addToQueue(context, evidence.toFinancialEvidence())
         markAsProcessed(context, evidence.bodyHash)
+        return added
     }
 
     fun removeFromQueue(context: Context, externalSourceId: String) {
@@ -91,7 +92,8 @@ object SmsPersistence {
                 amount = if (n.isNull("amount")) null else n.getDouble("amount"),
                 currency = if (n.isNull("currency")) null else n.getString("currency"),
                 cardLastFour = if (n.isNull("cardLastFour")) null else n.getString("cardLastFour"),
-                urls = urls
+                urls = urls,
+                transactionType = if (!n.has("transactionType") || n.isNull("transactionType")) null else n.getString("transactionType")
             ),
             originalSmsTimestamp = obj.getLong("originalSmsTimestamp"),
             timestamp = obj.optLong("timestamp", System.currentTimeMillis())
@@ -111,7 +113,10 @@ object SmsPersistence {
             urls = normalizedData.urls
         ),
         sourceTimestamp = originalSmsTimestamp,
-        metadata = mapOf("source" to "sms"),
+        metadata = buildMap {
+            put("source", "sms")
+            normalizedData.transactionType?.let { put("transactionType", it) }
+        },
         timestamp = timestamp
     )
 
@@ -127,7 +132,8 @@ object SmsPersistence {
                 amount = normalized.amount,
                 currency = normalized.currency,
                 cardLastFour = normalized.cardLastFour,
-                urls = normalized.urls
+                urls = normalized.urls,
+                transactionType = metadata["transactionType"]
             ),
             originalSmsTimestamp = sourceTimestamp,
             timestamp = timestamp

@@ -100,6 +100,10 @@ export function loadConfig(env = process.env) {
         'SCHEDULER_SHARED_TOKEN'
       ) || null,
 
+    writeFreezeToken:
+      get('WRITE_FREEZE_TOKEN') ||
+      get('SCHEDULER_SHARED_TOKEN') || null,
+
     recoveryDays:
       Math.min(
         30,

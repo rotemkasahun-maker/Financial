@@ -22,7 +22,8 @@ object SmsNormalizer {
             amount = extractAmount(body),
             currency = extractCurrency(body),
             cardLastFour = extractLastFour(body),
-            urls = extractUrls(body)
+            urls = extractUrls(body),
+            transactionType = extractTransactionType(body)
         )
     }
 
@@ -82,5 +83,11 @@ object SmsNormalizer {
             }
             .distinct()
             .toList()
+    }
+
+    private fun extractTransactionType(body: String): String? = when {
+        Regex("העברה|העברת|הועבר|bank transfer|transfer", RegexOption.IGNORE_CASE)
+            .containsMatchIn(body) -> "bank_transfer"
+        else -> null
     }
 }

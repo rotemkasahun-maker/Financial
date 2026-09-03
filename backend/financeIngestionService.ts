@@ -29,7 +29,7 @@ export class FinanceIngestionService {
     this.syncRepository = syncRepository;
   }
 
-  async processEvidence(evidence: FinancialEvidence) {
+  async processEvidence(evidence: FinancialEvidence, context: any = null) {
     if (!evidence.externalSourceId) {
       throw new Error('externalSourceId is required for idempotency');
     }
@@ -55,24 +55,79 @@ export class FinanceIngestionService {
       evidence.candidateType === 'TRANSACTION' &&
       this.hasMatchableTransactionData(evidence)
     ) {
-      result = await this.handleTransaction(evidence);
+      result = await this.handleTransaction(evidence, context);
     } else if (evidence.candidateType === 'RECEIPT_LINK') {
-      result = await this.handleReceiptLink(evidence);
+      result = await this.handleReceiptLink(evidence, context);
     } else {
       // Partial transaction evidence is staged instead of being passed
       // into matching with missing merchant/date fields.
-      result = await this.handleAmbiguous(evidence);
+      result = await this.handleAmbiguous(evidence, context);
     }
 
     await this.syncRepository.update(async (state: any) => {
       state.processedEvidence = state.processedEvidence || {};
       state.processedEvidence[evidence.externalSourceId] = {
         status: result.status,
+        transactionId: result.transactionId || null,
+        householdId: context?.householdId || result.householdId || null,
         processedAt: new Date().toISOString()
       };
     });
 
     return result;
+  }
+
+  async getEvidenceReceiptStatus(externalSourceId: string, context: any) {
+    if (!externalSourceId) throw new Error('externalSourceId is required');
+    const state = await this.syncRepository.read();
+    const processed = state.processedEvidence?.[externalSourceId] || null;
+
+    if (!processed || !processed.householdId || processed.householdId !== context.householdId) {
+      return {
+        externalSourceId,
+        ingestionStatus: 'not_found',
+        durableResult: null,
+        transactionId: null,
+        receiptStatus: 'unknown',
+        receiptPresent: null
+      };
+    }
+
+    if (!processed.transactionId) {
+      return {
+        externalSourceId,
+        ingestionStatus: 'pending',
+        durableResult: processed.status || null,
+        transactionId: null,
+        receiptStatus: 'unknown',
+        receiptPresent: null
+      };
+    }
+
+    const transaction = await this.dataService.getTransactionReceiptState(
+      processed.transactionId,
+      context
+    );
+
+    if (!transaction) {
+      return {
+        externalSourceId,
+        ingestionStatus: 'pending',
+        durableResult: processed.status || null,
+        transactionId: null,
+        receiptStatus: 'unknown',
+        receiptPresent: null
+      };
+    }
+
+    return {
+      externalSourceId,
+      ingestionStatus: 'resolved',
+      durableResult: processed.status || null,
+      transactionId: transaction.transactionId,
+      receiptStatus: transaction.receiptPresent ? 'present' : 'absent',
+      receiptPresent: transaction.receiptPresent
+    };
   }
 
   async listStagedEvidence() {
@@ -84,16 +139,18 @@ export class FinanceIngestionService {
       .map((item: any) => ({ ...item, candidates: transactions.filter((tx: any) => tx.financialType === 'expense' && item.normalized?.amount != null && Number(tx.amount) === Number(item.normalized.amount)).slice(0, 5) }));
   }
 
-  async resolveStagedEvidence(externalSourceId: string, transactionId: string | null, resolution: 'link' | 'reviewed' = 'link') {
+  async resolveStagedEvidence(externalSourceId: string, transactionId: string | null, resolution: 'link' | 'reviewed' = 'link', context: any = null) {
     if (!externalSourceId) throw new Error('externalSourceId is required');
     return this.syncRepository.update(async (state: any) => {
       const evidence = state.staging?.[externalSourceId];
       if (!evidence) return { status: 'already_resolved', evidenceId: externalSourceId };
+      if (context && evidence.householdId !== context.householdId) return { status: 'not_found', evidenceId: externalSourceId };
       if (evidence.status === 'resolved') return { status: 'already_resolved', evidenceId: externalSourceId, transactionId: evidence.transactionId || null };
       if (resolution === 'link') {
         if (!transactionId) throw new Error('transactionId is required to link evidence');
         const transaction = (await this.dataService.getTransactions()).find((item: any) => item.id === transactionId);
         if (!transaction) throw new Error('Transaction not found');
+        if (context && transaction.householdId && transaction.householdId !== context.householdId) throw new Error('Transaction not found');
         await this.dataService.linkEvidence(transactionId, {
           sourceType: evidence.sourceType || 'android_sms',
           externalSourceId,
@@ -101,6 +158,14 @@ export class FinanceIngestionService {
         });
       }
       state.staging[externalSourceId] = { ...evidence, status: 'resolved', resolution, transactionId: transactionId || null, resolvedAt: new Date().toISOString() };
+      state.processedEvidence = state.processedEvidence || {};
+      state.processedEvidence[externalSourceId] = {
+        ...(state.processedEvidence[externalSourceId] || {}),
+        status: 'resolved',
+        transactionId: transactionId || null,
+        householdId: context?.householdId || evidence.householdId || null,
+        processedAt: state.processedEvidence[externalSourceId]?.processedAt || new Date().toISOString()
+      };
       return { status: 'resolved', evidenceId: externalSourceId, transactionId: transactionId || null };
     });
   }
@@ -118,8 +183,10 @@ export class FinanceIngestionService {
     );
   }
 
-  private async handleTransaction(evidence: FinancialEvidence) {
-    const transactions = await this.dataService.getTransactions();
+  private async handleTransaction(evidence: FinancialEvidence, context: any = null) {
+    const transactions = (await this.dataService.getTransactions()).filter(
+      (transaction: any) => !context || transaction.householdId === context.householdId
+    );
     const normalized = evidence.normalized!;
 
     const matches = findReceiptMatches(
@@ -147,18 +214,20 @@ export class FinanceIngestionService {
 
       return {
         status: 'linked_automatically',
-        transactionId: highMatch.id
+        transactionId: highMatch.id,
+        householdId: context?.householdId || highMatch.householdId || null
       };
     }
 
-    return this.handleAmbiguous(evidence);
+    return this.handleAmbiguous(evidence, context);
   }
 
-  private async handleReceiptLink(evidence: FinancialEvidence) {
+  private async handleReceiptLink(evidence: FinancialEvidence, context: any = null) {
     await this.syncRepository.update((state: any) => {
       state.staging = state.staging || {};
       state.staging[evidence.externalSourceId] = {
         ...evidence,
+        householdId: context?.householdId || null,
         status: 'pending_fetch',
         sourceType: evidence.sourceType || 'android_sms',
         stagedAt: new Date().toISOString()
@@ -167,11 +236,12 @@ export class FinanceIngestionService {
     return { status: 'staged_for_fetch' };
   }
 
-  private async handleAmbiguous(evidence: FinancialEvidence) {
+  private async handleAmbiguous(evidence: FinancialEvidence, context: any = null) {
     await this.syncRepository.update((state: any) => {
       state.staging = state.staging || {};
       state.staging[evidence.externalSourceId] = {
         ...evidence,
+        householdId: context?.householdId || null,
         status: 'review_required',
         sourceType: evidence.sourceType || 'android_sms',
         stagedAt: new Date().toISOString()

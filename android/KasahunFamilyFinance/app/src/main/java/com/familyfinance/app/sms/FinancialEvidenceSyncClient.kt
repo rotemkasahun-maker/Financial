@@ -15,12 +15,14 @@ open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig) 
     open fun sendEvidence(payload: JSONObject): Boolean {
         var connection: HttpURLConnection? = null
         return try {
+            val householdSession = postHouseholdSession()
             val url = URL("${config.backendUrl}/api/ingestion/evidence")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${config.connectorToken}")
+            householdSession?.let { connection.setRequestProperty("X-Household-Session", it) }
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
 
@@ -39,6 +41,28 @@ open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig) 
             false
         } finally {
             connection?.disconnect()
+        }
+    }
+
+    private fun postHouseholdSession(): String? {
+        if (config.householdUser.isBlank() || config.householdCredential.isBlank()) return null
+        val connection = URL("${config.backendUrl}/api/auth/session").openConnection() as HttpURLConnection
+        return try {
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            val request = JSONObject()
+                .put("userId", config.householdUser)
+                .put("credential", config.householdCredential)
+            OutputStreamWriter(connection.outputStream).use { it.write(request.toString()) }
+            check(connection.responseCode in 200..299) {
+                "Household authentication failed: ${connection.responseCode}"
+            }
+            JSONObject(connection.inputStream.bufferedReader().readText()).getString("session")
+        } finally {
+            connection.disconnect()
         }
     }
 

@@ -43,6 +43,8 @@ import com.familyfinance.app.sms.SmsAnalysisResult
 import com.familyfinance.app.sms.SmsCandidateType
 import com.familyfinance.app.sms.SmsEvidenceMapper
 import com.familyfinance.app.sms.SmsPersistence
+import com.familyfinance.app.maintenance.MaintenanceSyncClient
+import com.familyfinance.app.maintenance.MaintenanceNotifier
 import com.familyfinance.app.ui.theme.KasahunFamilyFinanceTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,6 +84,16 @@ fun SmsTestScreen() {
     var syncStatus by remember {
         mutableStateOf("")
     }
+    var maintenanceStatus by remember { mutableStateOf("") }
+
+    var notificationPermissionGranted by remember {
+        mutableStateOf(
+            android.os.Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
 
     var pendingCount by remember {
         mutableStateOf(FinancialEvidencePersistence.getQueue(context).size)
@@ -103,6 +115,13 @@ fun SmsTestScreen() {
             contract = ActivityResultContracts.RequestPermission()
         ) { granted ->
             smsPermissionGranted = granted
+        }
+
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            notificationPermissionGranted = granted
         }
 
     Scaffold(
@@ -167,6 +186,29 @@ fun SmsTestScreen() {
             }
 
             NotificationAccessCard()
+
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("תזכורות תחזוקה", style = MaterialTheme.typography.titleMedium)
+                        Text(if (notificationPermissionGranted) "הרשאת התראות פעילה" else "כדי לקבל תזכורות גם כשהאפליקציה סגורה, יש לאשר התראות.")
+                        if (!notificationPermissionGranted) {
+                            Button(
+                                onClick = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("אישור התראות") }
+                        }
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Shared maintenance (read-only)", style = MaterialTheme.typography.titleMedium)
+                    Button(onClick = { coroutineScope.launch { maintenanceStatus = try { val snapshot = withContext(Dispatchers.IO) { MaintenanceSyncClient(context).sync() }; MaintenanceNotifier.notifyIfNeeded(context, snapshot); "Synced: ${snapshot.openTaskCount} open tasks, ${snapshot.expectedDocumentCount} documents, attention ${snapshot.attentionCount}" } catch (error: Exception) { "Sync failed; last good snapshot kept" } } }, modifier = Modifier.fillMaxWidth()) { Text("REFRESH MAINTENANCE STATE") }
+                    if (maintenanceStatus.isNotBlank()) Text(maintenanceStatus)
+                }
+            }
 
             OutlinedTextField(
                 value = sender,
@@ -244,7 +286,9 @@ fun SmsTestScreen() {
                             coroutineScope.launch {
                                 val config = FinancialSyncConfig(
                                     backendUrl = BuildConfig.FAMILY_FINANCE_BACKEND_URL,
-                                    connectorToken = BuildConfig.FAMILY_FINANCE_CONNECTOR_TOKEN
+                                    connectorToken = BuildConfig.FAMILY_FINANCE_CONNECTOR_TOKEN,
+                                    householdUser = BuildConfig.FAMILY_FINANCE_HOUSEHOLD_USER,
+                                    householdCredential = BuildConfig.FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL
                                 )
                                 val client = FinancialEvidenceSyncClient(config)
                                 val service = FinancialEvidenceSyncService(client)

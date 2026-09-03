@@ -7,7 +7,8 @@ object SmsEvidenceMapper {
         sender: String? = null,
         originalTimestamp: Long = System.currentTimeMillis()
     ): SmsAnalysisResult {
-        val candidateType = SmsCandidateDetector.detect(body)
+        val decision = SmsCandidateDetector.decide(body)
+        val candidateType = decision.candidateType
         val normalizedData = SmsNormalizer.normalize(body)
 
         val reason = when (candidateType) {
@@ -49,7 +50,8 @@ object SmsEvidenceMapper {
             candidateType = candidateType,
             normalizedData = normalizedData,
             evidence = evidence,
-            reason = reason
+            reason = reason,
+            decisionCode = decision.reasonCode
         )
     }
 }
