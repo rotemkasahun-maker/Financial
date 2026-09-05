@@ -1,0 +1,10 @@
+import { createHash } from 'node:crypto';
+const t=v=>String(v??'').trim(), n=v=>t(v).toLowerCase().replace(/\s+/g,' ');
+const keyHash=v=>createHash('sha256').update(v).digest('hex');
+const summary=/^(סה.?כ|הפרש|פריטים דורשי|subtotal|total|difference)/iu;
+export function groupMicroReceiptRows(rows=[], { source='קבלות - מיקרו' }={}) {
+  const groups=new Map();
+  for(const row of rows){ const image=t(row.sourceImage||row.מקור_תמונה||row.sourceReference), doc=t(row.invoiceNumber||row.receiptNumber||row.orderId||row.documentNumber), merchant=n(row.merchant||row.provider), date=t(row.date||row.transactionDate), stable=image||doc||(merchant&&date?`${merchant}|${date}|${n(row.source||source)}`:''); if(!stable) continue; const groupKey=`${source}:${stable}`; let g=groups.get(groupKey); if(!g){g={groupKey,sourceRowsCount:0,merchant:row.merchant||row.provider||null,date:date||null,sourceIdentity:stable,items:[],explicitTotal:null,totalDerivationMethod:'unresolved',identityStrength:image||doc?'strong':'composite'};groups.set(groupKey,g)} g.sourceRowsCount++; const label=t(row.label||row.type||row.name||row.description||''); if(/סה.?כ בקבלה|receipt total|grand total/iu.test(label)){const amount=Number(row.amount??row.total);if(Number.isFinite(amount))g.explicitTotal=amount} if(!summary.test(label)){g.items.push({...row})} }
+  return [...groups.values()].map(g=>{const sum=g.items.reduce((s,r)=>s+(Number(r.amount??r.total)||0),0); const total=g.explicitTotal??(g.items.length&&g.items.every(r=>Number.isFinite(Number(r.amount??r.total)))?sum:null); return {...g,derivedReceiptTotal:total,totalDerivationMethod:g.explicitTotal!=null?'explicit':total!=null?'sum_items':'unresolved'} });
+}
+export function groupingSourceHash(group){return keyHash(JSON.stringify({sourceIdentity:group.sourceIdentity,merchant:n(group.merchant),date:group.date,items:group.items.map(r=>({name:r.name||r.description||r.item,amount:Number(r.amount??r.total)||null})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),total:group.derivedReceiptTotal}))}
