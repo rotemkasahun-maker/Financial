@@ -48,6 +48,8 @@ import {
 import { createAuth } from './auth.ts';
 import { WriteFreezeController } from './writeFreeze.ts';
 import { GoogleSheetsSourceReader, buildDryRunReport, adaptExpensesSheetRows, adaptBankSheetRows, adaptIncomeSheetRows, adaptEvidenceRows, adaptReviewRows, reconcileDryRun, buildCandidateInventory, reconcileCandidates, compareRerunIdentities, semanticDiagnostics, finalSafeImportSummary, buildFinalSafeCandidates, blockerDiagnostics } from './googleSheetsIngestion.ts';
+import { createDiagnosticsStore } from './diagnosticsStore.ts';
+import { TrustedSessionStore } from './trustedSessionStore.ts';
 
 const json = (res, status, value) => {
   res.writeHead(status, {
@@ -135,12 +137,16 @@ export function createBackend({
   verifyPush = verifyGoogleOidc,
   financeRepository = null,
   financeDataService = null,
-  receiptIngestionService = null
+  receiptIngestionService = null,
+  diagnosticsStore = null
 } = {}) {
   config =
     config || loadConfig();
 
+  diagnosticsStore = diagnosticsStore || createDiagnosticsStore(config);
+
   const auth = config.authSigningSecret ? createAuth(config) : null;
+  const trustedSessions = auth && config.stateEncryptionKey ? new TrustedSessionStore({ config }) : null;
   const freezeController = new WriteFreezeController();
 
   repository =
@@ -242,13 +248,38 @@ export function createBackend({
           const payload = await body(req);
           const identity = auth.authenticate(payload.userId, payload.credential);
           if (!identity) return json(res, 401, { error: 'invalid_credentials' });
-          return json(res, 200, { session: auth.issue(identity), user: identity });
+          const result = { session: auth.issue(identity), user: identity };
+          if (payload.trustedDevice === true && trustedSessions) result.trustedDevice = await trustedSessions.issue(identity);
+          return json(res, 200, result);
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/auth/renew') {
+          if (!trustedSessions || !auth) return json(res, 503, { error: 'trusted_sessions_not_configured' });
+          const payload = await body(req); const renewed = await trustedSessions.rotate(payload.trustedDevice);
+          if (!renewed) return json(res, 401, { error: 'invalid_trusted_session' });
+          return json(res, 200, { session: auth.issue({ userId: renewed.userId, householdId: renewed.householdId }), trustedDevice: { secret: renewed.secret, expiresAt: renewed.expiresAt }, user: { userId: renewed.userId, householdId: renewed.householdId } });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+          if (trustedSessions) { const payload = await body(req); if (payload.trustedDevice) await trustedSessions.revoke(payload.trustedDevice); }
+          return json(res, 200, { ok: true });
         }
 
         if (req.method === 'GET' && url.pathname === '/api/auth/me') {
           if (!auth) return json(res, 503, { error: 'auth_not_configured' });
           try { return json(res, 200, { user: auth.authenticateRequest(req) }); }
           catch { return json(res, 401, { error: 'unauthorized' }); }
+        }
+
+        if (url.pathname === '/api/diagnostics/events' || url.pathname === '/api/diagnostics/recent-events') {
+          if (!auth || !diagnosticsStore) return json(res, 503, { error: 'diagnostics_not_configured' });
+          let context; try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          if (req.method === 'POST' && url.pathname === '/api/diagnostics/events') {
+            try { return json(res, 200, { event: await diagnosticsStore.upsert(context.householdId, await body(req)) }); }
+            catch (error) { return json(res, 400, { error: error.code || error.message || 'invalid_trace' }); }
+          }
+          if (req.method === 'GET' && url.pathname === '/api/diagnostics/recent-events') return json(res, 200, { events: await diagnosticsStore.recent(context.householdId) });
+          return json(res, 405, { error: 'method_not_allowed' });
         }
 
         if (url.pathname === '/internal/write-freeze') {
@@ -276,6 +307,13 @@ export function createBackend({
           if (!auth || !financeDataService) return json(res, 401, { error: 'unauthorized' });
           let context;
           try { context = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          if (req.method === 'POST' && url.pathname === '/api/finance/receipt-response') {
+            const payload = await body(req); const externalSourceId = String(payload.externalSourceId || '').trim(); const response = String(payload.response || '');
+            if (!externalSourceId || externalSourceId.length > 256 || !['DIGITAL_AWAITING_DOCUMENT','NO_RECEIPT_RECEIVED'].includes(response)) return json(res, 400, { error: 'invalid_receipt_response' });
+            if (!financeRepository) return json(res, 503, { error: 'finance_not_configured' });
+            await financeRepository.update((state: any) => { state.receiptResponses = state.receiptResponses || {}; const key = `${context.householdId}:${externalSourceId}`; state.receiptResponses[key] = { externalSourceId, response, updatedAt: new Date().toISOString() }; });
+            return json(res, 200, { externalSourceId, response });
+          }
           if (req.method === 'POST' && url.pathname === '/api/finance/google-sheets/dry-run') {
             const payload = await body(req);
             const startDate = String(payload.startDate || '');
@@ -308,6 +346,7 @@ export function createBackend({
             const [startDate,endDate] = windows[period]; const tabs = await sheetsReader.readRequiredTabs(); const expense = adaptExpensesSheetRows(tabs.find(item=>item.tab==='הוצאות')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const bank=adaptBankSheetRows(tabs.find(item=>item.tab==='תנועות בנק')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const income=adaptIncomeSheetRows(tabs.find(item=>item.tab==='הכנסות')?.rows||[]).rows.filter((row:any)=>row.date>=startDate&&row.date<=endDate); const candidates=[...expense,...bank,...income].filter((row:any)=>row.valid!==false&&!row.reviewRequired&&!row.excluded); const cross=reconcileCandidates(candidates); const safe=buildFinalSafeCandidates(candidates.filter((row:any)=>!cross.suppressedIdentities.includes(row.externalSourceId))); const summary=finalSafeImportSummary(safe); if(expectedHash&&summary.finalSafeCandidateIdentityHash!==expectedHash)return json(res,409,{error:'safe_set_changed'}); const result=await financeDataService.importRows(safe,context); return json(res,200,{period,safeCount:safe.length,finalSafeCandidateIdentityHash:summary.finalSafeCandidateIdentityHash,imported:result?.imported||0,duplicates:result?.duplicates||0});
           }
           if (req.method === 'GET' && url.pathname === '/api/finance/state') return json(res, 200, await financeDataService.getHouseholdState(context));
+          if (req.method === 'GET' && url.pathname === '/api/finance/engagement') return json(res, 200, await financeDataService.getEngagementState(context));
           if (req.method === 'GET' && url.pathname.startsWith('/api/finance/evidence-status/')) {
             const externalSourceId = decodeURIComponent(url.pathname.split('/').pop());
             return json(res, 200, await ingestionService.getEvidenceReceiptStatus(externalSourceId, context));
@@ -636,32 +675,35 @@ export function createBackend({
           url.pathname ===
             '/internal/maintenance'
         ) {
-          if (
-            config
-              .schedulerToken &&
-            req.headers
-              .authorization !==
-              `Bearer ${config.schedulerToken}`
-          ) {
-            return json(
-              res,
-              401,
-              {
-                error:
-                  'unauthorized'
-              }
-            );
-          }
-
-          return json(
-            res,
-            200,
-            {
-              renewal:
-                await sync
-                  .renewWatches()
+          const maintenanceRequestedAt = new Date().toISOString();
+          const schedulerBearer = req.headers.authorization;
+          const sharedTokenValid = config.schedulerToken && schedulerBearer === `Bearer ${config.schedulerToken}`;
+          if (!sharedTokenValid) {
+            try {
+              await verifyPush(schedulerBearer, {
+                audience: `${config.publicBaseUrl || 'http://127.0.0.1:8080'}/internal/maintenance`,
+                serviceAccount: config.pushServiceAccount
+              });
+            } catch {
+              console.log(JSON.stringify({ event: 'gmail_maintenance_failed', requestedAt: maintenanceRequestedAt, authorized: false, failureCode: 'unauthorized' }));
+              return json(res, 401, { error: 'unauthorized' });
             }
-          );
+          }
+          console.log(JSON.stringify({ event: 'gmail_maintenance_started', requestedAt: maintenanceRequestedAt, authorized: true, started: true, watchRenewalAttempted: true, recoveryAttempted: false }));
+          try {
+            const renewal = await sync.renewWatches();
+            const failed = renewal.filter(result => !result.ok).length;
+            const watchRenewal = renewal.length === 0 ? 'skipped' : failed ? 'fail' : 'success';
+            const result = { ok: failed === 0, watchRenewal, processed: 0, skipped: 0, failed, checkpointUpdated: renewal.length > 0 };
+            console.log(JSON.stringify({ event: 'gmail_watch_renewal_result', ...result }));
+            console.log(JSON.stringify({ event: 'gmail_checkpoint_result', attempted: false, updated: result.checkpointUpdated, processed: 0, skipped: 0, failed }));
+            console.log(JSON.stringify({ event: 'gmail_maintenance_completed', requestedAt: maintenanceRequestedAt, authorized: true, started: true, watchRenewalAttempted: true, watchRenewalResult: watchRenewal, recoveryAttempted: false, processed: 0, skipped: 0, failed, checkpointWrite: result.checkpointUpdated, completed: true }));
+            return json(res, 200, result);
+          } catch (error) {
+            const failureCode = error?.code || 'maintenance_failed';
+            console.log(JSON.stringify({ event: 'gmail_maintenance_failed', requestedAt: maintenanceRequestedAt, authorized: true, started: true, completed: false, failureCode }));
+            return json(res, 500, { error: failureCode });
+          }
         }
 
         if (

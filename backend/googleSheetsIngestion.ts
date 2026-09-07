@@ -189,7 +189,15 @@ export class GoogleSheetsSourceReader {
   async request(path: string) {
     const token = await this.tokenProvider();
     const response = await this.fetchImpl(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(this.spreadsheetId)}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error(`Sheets API read failed: ${response.status}`);
+    if (!response.ok) {
+      let detail: any = null;
+      try { detail = await response.json(); } catch { detail = null; }
+      const error = detail?.error || {};
+      const reasons = Array.isArray(error.errors) ? error.errors.map((item: any) => item?.reason).filter(Boolean).slice(0, 5) : [];
+      const safeMessage = String(error.message || '').replace(/[\r\n]+/g, ' ').slice(0, 240);
+      const suffix = [error.status, reasons.join(','), safeMessage].filter(Boolean).join(' | ');
+      throw new Error(`SHEETS READ FAILED HTTP=${response.status}${suffix ? ` GOOGLE=${suffix}` : ''}`);
+    }
     return response.json();
   }
 

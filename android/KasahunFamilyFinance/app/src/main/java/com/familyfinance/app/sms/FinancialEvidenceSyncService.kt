@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.familyfinance.app.evidence.FinancialEvidence
 import com.familyfinance.app.evidence.FinancialEvidencePersistence
+import com.familyfinance.app.evidence.EventTraceRecorder
 import com.familyfinance.app.receipt.ReceiptReminderScheduler
 import org.json.JSONArray
 import org.json.JSONObject
@@ -27,12 +28,15 @@ class FinancialEvidenceSyncService(
         var errorCount = 0
 
         for (evidence in queue) {
+            EventTraceRecorder.record(context, evidence.externalSourceId, evidence.sourceType, "sync_attempted", "started")
             val success = client.sendEvidence(mapToPayload(evidence))
             if (success) {
+                EventTraceRecorder.record(context, evidence.externalSourceId, evidence.sourceType, "sync_succeeded", "success")
                 scheduleReceiptCheck(context, evidence)
                 FinancialEvidencePersistence.removeFromQueue(context, evidence.externalSourceId)
                 successCount++
             } else {
+                EventTraceRecorder.record(context, evidence.externalSourceId, evidence.sourceType, "sync_failed", "failed", "http_or_network")
                 Log.w(TAG, "Sync failed for item ${evidence.externalSourceId}. Stopping batch.")
                 errorCount = initialPending - successCount
                 break

@@ -7,6 +7,8 @@ Build a Hebrew-first household finance web app for managing family expenses, inc
 - Hebrew UI, RTL by default.
 - Mobile-first, but comfortable on desktop.
 - Google Sheets is the initial source of truth for financial data.
+- For the Alpha, the Google Sheet `מעקב הוצאות משפחתי - ראשי` (`19XaIrFj64ozMOvviU4U9We3_7gD8bW40TdLaWM2iXWc`) is the shared financial reference.
+- The `QA יתרות` tab is used only for manual truth points when validating balance calculations. It is not a product feature, does not require ongoing balance entry, and must not trigger work on Balance UI, Open Banking, scraping, automation, or Safe-to-Spend.
 - Never silently delete or overwrite user financial data.
 - Any destructive action must require confirmation.
 - Imported bank/card transactions and uploaded receipts must be deduplicated whenever possible.
@@ -61,6 +63,7 @@ Primary mobile action:
 - First action: "צלמי קבלה"
 
 ## Engineering expectations
+- Before any production deploy, APK installation, real-world transaction test, or infrastructure mutation, run the relevant Alpha preflight and require PASS. Do not use real transactions to discover build or configuration prerequisites.
 - Follow `CODEX_WORKING_RULES.md` for persistent financial-integrity, automation, safety, testing, and delivery conventions.
 - Prefer a simple, maintainable architecture.
 - Add migrations/schema definitions if using a database.

@@ -1,11 +1,12 @@
 import { generateId } from '../utils/id.js';
+import { resolveDocumentRequirement } from '../shared/documentRequirement.js';
 
 export const TaskStatus=Object.freeze({OPEN:'open',COMPLETED:'completed',SNOOZED:'snoozed',DISMISSED:'dismissed',NO_RECEIPT:'no_receipt_available'});
 
 export function inferTaskOwner(transaction){return transaction.userId||transaction.sourceMetadata?.userId||(transaction.sourceAccount?.includes('1180')?'demo-member-b':transaction.sourceAccount?'demo-member-a':null);}
 
 export function ensureMissingReceiptTask(transaction,tasks,{now=new Date(),waitingPeriodHours=24,rewardXP=20}={}){
-  if(transaction.receiptId||transaction.financialType!=='expense')return {tasks,created:null};
+  if(transaction.receiptId||transaction.financialType!=='expense'||resolveDocumentRequirement(transaction)==='none'||resolveDocumentRequirement(transaction)==='unknown')return {tasks,created:null};
   const key=`missing_receipt:${transaction.id}`;
   const existing=tasks.find(t=>t.dedupeKey===key);
   if(existing)return {tasks,created:null};

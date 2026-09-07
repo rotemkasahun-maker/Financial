@@ -49,18 +49,59 @@ import com.familyfinance.app.ui.theme.KasahunFamilyFinanceTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.viewinterop.AndroidView
 
 class MainActivity : ComponentActivity() {
+    internal var shellWebView: WebView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {
             KasahunFamilyFinanceTheme {
-                SmsTestScreen()
+                WebViewShell()
             }
         }
     }
+
+    override fun onBackPressed() {
+        val webView = shellWebView
+        if (webView?.canGoBack() == true) webView.goBack() else super.onBackPressed()
+    }
+}
+
+@Composable
+private fun WebViewShell() {
+    val context = LocalContext.current
+    AndroidView(factory = {
+        WebView(it).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.allowFileAccess = false
+            settings.setSupportMultipleWindows(false)
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                    val uri = runCatching { Uri.parse(url) }.getOrNull()
+                    val internal = uri?.scheme == "https" &&
+                        uri.host == Uri.parse(BuildConfig.FAMILY_FINANCE_WEB_URL).host
+                    if (internal) return false
+                    if (uri?.scheme == "http" || uri?.scheme == "https") {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        return true
+                    }
+                    return false
+                }
+            }
+            (context as? MainActivity)?.shellWebView = this
+            loadUrl(BuildConfig.FAMILY_FINANCE_WEB_URL)
+        }
+    }, update = { view -> if (view.url == null) view.loadUrl(BuildConfig.FAMILY_FINANCE_WEB_URL) })
 }
 
 @Composable

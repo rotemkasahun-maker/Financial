@@ -17,13 +17,14 @@ export type FinanceState = {
   tasks: any[];
   expectedDocuments: any[];
   rewardEvents: Record<string, any>;
+  receiptResponses: Record<string, any>;
 };
 
 export const emptyFinanceState = (): FinanceState => ({
   version: 1,
   transactions: [],
   receipts: []
-  ,idempotency: {}, tasks: [], expectedDocuments: [], rewardEvents: {}
+  ,idempotency: {}, tasks: [], expectedDocuments: [], rewardEvents: {}, receiptResponses: {}
 });
 
 export class FinanceStateRepository {
@@ -126,6 +127,7 @@ function normalizeFinanceState(
     tasks: Array.isArray(value?.tasks) ? value.tasks : [],
     expectedDocuments: Array.isArray(value?.expectedDocuments) ? value.expectedDocuments : [],
     rewardEvents: value?.rewardEvents && typeof value.rewardEvents === 'object' ? value.rewardEvents : {}
+    ,receiptResponses: value?.receiptResponses && typeof value.receiptResponses === 'object' ? value.receiptResponses : {}
   };
 }
 

@@ -23,7 +23,7 @@ fun interface ReceiptGraceEnqueuer {
 
 class ReceiptGraceScheduler(
     private val enqueuer: ReceiptGraceEnqueuer,
-    private val graceMillis: Long = 60_000L,
+    private val graceMillis: Long = 0L,
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
     fun onIngested(evidence: FinancialEvidence): ReceiptGraceWork? {

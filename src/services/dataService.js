@@ -55,7 +55,7 @@ export class BackendFinanceDataService extends FinanceDataService {
   async getRecurring() { return []; }
   async getReimbursementExpectations() { return []; }
   async getIngestionState() { const state = await this.request('/api/finance/state'); const expectedDocuments = (state.expectedDocuments || []).map(doc => ({ ...doc, expectedDate: doc.expectedDate || doc.dueDate })); return { sources: [], expectedDocuments, importRuns: [], issues: [], reminders: [] }; }
-  async getEngagementState() { const state = await this.request('/api/finance/state'); const transactions = state.transactions || []; const tasks = (state.tasks || []).map(task => { const tx = transactions.find(item => item.id === task.relatedRecordId); return tx ? { ...task, explanation: task.explanation || `${tx.merchant} · ${tx.amount} ₪`, transactionId: tx.id, merchant: tx.merchant, amount: tx.amount, date: tx.date, category: tx.category, deepLink: task.deepLink || (task.type === 'missing_receipt' ? { route: 'receipt_capture', params: { transactionId: tx.id } } : undefined) } : task; }); return { tasks, xpEvents: Object.values(state.rewardEvents || {}), userScores: [], challenges: [], achievements: [], notificationRules: [], lastXPEvent: null }; }
+  async getEngagementState() { return this.request('/api/finance/engagement'); }
   async getClassificationRules() { return []; }
   async hydrateClassificationRules() { return []; }
 }

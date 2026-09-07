@@ -35,6 +35,7 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <receiver android:name=".receipt.ReceiptResponseActionReceiver" android:exported="false" />
 
         <activity
             android:name=".MainActivity"

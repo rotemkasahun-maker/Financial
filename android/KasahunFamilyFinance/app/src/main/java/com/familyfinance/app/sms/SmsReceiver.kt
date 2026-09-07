@@ -6,6 +6,7 @@ import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
 import com.familyfinance.app.evidence.EvidenceSyncWorkScheduler
+import com.familyfinance.app.evidence.EventTraceRecorder
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -30,6 +31,7 @@ class SmsReceiver : BroadcastReceiver() {
 
         val timestamp = messages.firstOrNull()
             ?.timestampMillis ?: System.currentTimeMillis()
+        EventTraceRecorder.record(context, "sms:$timestamp", "sms", "source_event_received", "received")
 
         val body = messages
             .joinToString(separator = "") { message ->
@@ -64,6 +66,7 @@ class SmsReceiver : BroadcastReceiver() {
 
         when (result.candidateType) {
             SmsCandidateType.NOISE -> {
+                EventTraceRecorder.record(context, bodyHash, "sms", "detector_rejected", "rejected", result.decisionCode)
                 // Privacy-first:
                 // discard NOISE immediately. Do not persist hash.
                 Log.d(
@@ -79,12 +82,15 @@ class SmsReceiver : BroadcastReceiver() {
                     val persisted = added && SmsPersistence.getQueue(context)
                         .any { it.externalSourceId == evidence.externalSourceId }
                     if (!persisted) {
+                        EventTraceRecorder.record(context, evidence.externalSourceId, "sms", "evidence_persisted", "failed", "queue_verification_failed")
                         Log.e(
                             TAG,
                             "SMS persistence rejected: candidate=${result.candidateType.name} reason=${if (added) "QUEUE_VERIFICATION_FAILED" else "NOT_ADDED"} sender=${safeSenderLabel(sender)} chars=${body.length} parts=${messages.size}"
                         )
                         return
                     }
+                    EventTraceRecorder.record(context, evidence.externalSourceId, "sms", "detector_accepted", "accepted")
+                    EventTraceRecorder.record(context, evidence.externalSourceId, "sms", "evidence_persisted", "success")
                     EvidenceSyncWorkScheduler.schedule(context, evidence.externalSourceId)
                     Log.d(
                         TAG,

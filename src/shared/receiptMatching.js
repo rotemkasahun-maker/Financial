@@ -3,6 +3,22 @@ const clean = (s = '') =>
     .toLowerCase()
     .replace(/[\s\-״"']/g, '');
 
+export function normalizeMatchDate(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  const s = String(value ?? '').trim();
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+}
+
+export function parseMatchAmount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const s = String(value ?? '').trim().replace(/[₪\u00a0\s]/g, '').replace(/,/g, '');
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export const merchantSimilarity = (a, b) => {
   const x = clean(a);
   const y = clean(b);
@@ -45,8 +61,8 @@ export const merchantSimilarity = (a, b) => {
 export const daysBetween = (a, b) =>
   Math.abs(
     (
-      new Date(a) -
-      new Date(b)
+        new Date(normalizeMatchDate(a)) -
+        new Date(normalizeMatchDate(b))
     ) / 86400000
   );
 
@@ -63,8 +79,8 @@ export function findReceiptMatches(
     .map(transaction => {
       const amountDiff =
         Math.abs(
-          Number(receipt.total) -
-          Number(transaction.amount)
+          parseMatchAmount(receipt.total) -
+          parseMatchAmount(transaction.amount)
         );
 
       const amountScore =

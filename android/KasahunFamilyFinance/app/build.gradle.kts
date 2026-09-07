@@ -28,6 +28,12 @@ android {
         val backendUrl = providers.gradleProperty("FAMILY_FINANCE_BACKEND_URL")
             .orElse(localProperties.getProperty("familyFinanceBackendUrl", "http://10.0.2.2:8080"))
             .get()
+        val alphaBuild = providers.gradleProperty("FAMILY_FINANCE_ALPHA").orElse("false").get().toBoolean()
+        if (alphaBuild) {
+            require(backendUrl == "https://family-finance-alpha-233568917860.europe-west1.run.app") {
+                "FAMILY_FINANCE_ALPHA requires the approved production Cloud Run backend URL"
+            }
+        }
         val connectorToken = providers.gradleProperty("FAMILY_FINANCE_CONNECTOR_TOKEN")
             .orElse(localProperties.getProperty("familyFinanceConnectorToken", "local-test-token"))
             .get()

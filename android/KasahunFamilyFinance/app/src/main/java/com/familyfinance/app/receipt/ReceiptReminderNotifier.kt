@@ -62,10 +62,15 @@ object ReceiptReminderNotifier {
                 .setContentTitle("לשמור את הקבלה?")
                 .setContentText("אפשר לצלם אותה עכשיו לפני שממשיכים")
                 .setContentIntent(intent)
+                .addAction(NotificationCompat.Action.Builder(0, "לצלם קבלה", intent).build())
+                .addAction(NotificationCompat.Action.Builder(0, "קבלה דיגיטלית", action(context, externalSourceId, "DIGITAL_AWAITING_DOCUMENT", id + 1)).build())
+                .addAction(NotificationCompat.Action.Builder(0, "אין קבלה", action(context, externalSourceId, "NO_RECEIPT_RECEIVED", id + 2)).build())
                 .setAutoCancel(true)
                 .build()
         )
         prefs.edit().putStringSet("notifiedExternalSourceIds", notified.toMutableSet().apply { add(externalSourceId) }).apply()
         return true
     }
+
+    private fun action(context: Context, id: String, response: String, requestCode: Int): PendingIntent = PendingIntent.getBroadcast(context, requestCode, Intent(context, ReceiptResponseActionReceiver::class.java).putExtra("externalSourceId", id).putExtra("response", response), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 }

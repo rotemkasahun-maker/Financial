@@ -9,10 +9,12 @@ import com.familyfinance.app.evidence.FinancialEvidenceCandidateType
 import com.familyfinance.app.evidence.FinancialEvidencePersistence
 import com.familyfinance.app.evidence.EvidenceSyncWorkScheduler
 import com.familyfinance.app.evidence.FinancialNormalizedData
+import com.familyfinance.app.evidence.EventTraceRecorder
 
 class FinancialNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
+        EventTraceRecorder.record(applicationContext, item.key, "notification", "source_event_received", "received")
 
         if (item.packageName != GoogleWalletNotificationParser.GOOGLE_WALLET_PACKAGE) {
             return
@@ -32,6 +34,7 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             title = title,
             body = body
         ) ?: run {
+            EventTraceRecorder.record(applicationContext, item.key, "notification", "detector_rejected", "rejected", "unsupported_or_parse_failure")
             WalletEventDiagnostic.received(applicationContext, item.postTime, false, "unsupported_or_parse_failure")
             return
         }
@@ -56,6 +59,8 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         )
 
         val added = FinancialEvidencePersistence.addToQueue(applicationContext, evidence)
+        EventTraceRecorder.record(applicationContext, evidence.externalSourceId, "notification", "detector_accepted", "accepted")
+        EventTraceRecorder.record(applicationContext, evidence.externalSourceId, "notification", "evidence_persisted", if (added) "success" else "duplicate")
         if (added) EvidenceSyncWorkScheduler.schedule(applicationContext, evidence.externalSourceId)
         WalletEventDiagnostic.record(applicationContext, org.json.JSONObject()
             .put("eventAt", parsed.originalTimestamp).put("source", "google_wallet")

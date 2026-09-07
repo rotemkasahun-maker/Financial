@@ -22,7 +22,8 @@ class FinancialEvidenceSyncWorker(
                     BuildConfig.FAMILY_FINANCE_CONNECTOR_TOKEN,
                     BuildConfig.FAMILY_FINANCE_HOUSEHOLD_USER,
                     BuildConfig.FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL
-                )
+                ),
+                outcomeObserver = { outcome -> SyncOutcomeStore.record(applicationContext, outcome) }
             )
         )
         val result = service.syncEvidenceQueue(applicationContext)

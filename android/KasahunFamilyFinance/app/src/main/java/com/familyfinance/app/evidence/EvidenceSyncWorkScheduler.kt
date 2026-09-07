@@ -26,6 +26,12 @@ object EvidenceSyncWorkScheduler {
         )
     }
 
+    /** Re-enqueues pending evidence after process start/reboot without changing queue data. */
+    fun schedulePending(context: Context) {
+        FinancialEvidencePersistence.getQueue(context)
+            .forEach { schedule(context, it.externalSourceId) }
+    }
+
     private fun stableHash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray())
         .joinToString("") { "%02x".format(it) }

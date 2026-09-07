@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   FinanceStateRepository
 } from './financeStorage.ts';
+import { resolveDocumentRequirement } from '../src/shared/documentRequirement.js';
 
 export type BackendReceipt = {
   id?: string;
@@ -53,6 +54,16 @@ export class BackendFinanceDataService {
     return structuredClone(
       state.transactions
     );
+  }
+
+  async getEngagementState(context: any) {
+    const state = await this.repository.read();
+    const tasks = (state.tasks || []).filter((item: any) => !item.householdId || item.householdId === context.householdId);
+    const events = Object.values(state.rewardEvents || {}).filter((event: any) => !event.householdId || event.householdId === context.householdId) as any[];
+    const xp = events.reduce((sum, event) => sum + Math.max(0, Number(event.amount || 0)), 0);
+    const scores = new Map<string, any>();
+    for (const event of events) if (event.completedBy) { const row = scores.get(event.completedBy) || { userId: event.completedBy, displayName: event.completedBy, xp: 0, activeStreak: 0 }; row.xp += Math.max(0, Number(event.amount || 0)); scores.set(event.completedBy, row); }
+    return { tasks, xpEvents: events, userScores: [...scores.values()], challenges: [], achievements: [], notificationRules: [], rewardConfig: {}, lastXPEvent: null, madridGoal: { id: 'madrid-main-goal', title: 'הדרך למדריד', targetAmount: 15000, realSavedAmount: 0, currency: 'ILS', xp, isDemo: false, dataSource: 'reward_events', contributions: [], participants: [], challenges: [], planningBreakdown: [] } };
   }
 
   async getTransactionReceiptState(
@@ -108,7 +119,7 @@ export class BackendFinanceDataService {
       const key = `expected_document:${id}`;
       if (!doc.received && !state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || doc.householdId || null, type: 'expected_document', dedupeKey: key, relatedRecordId: id, title: rule.title, explanation: `${rule.type} — ${period} עדיין חסר`, status: 'open', priority: 'high', xpReward: 15, deepLink: { route: 'document_upload', params: { documentId: id } } });
     }
-    for (const tx of state.transactions.filter((item: any) => item.financialType === 'expense' && !item.receiptId)) {
+    for (const tx of state.transactions.filter((item: any) => item.financialType === 'expense' && !item.receiptId && ['receipt', 'invoice'].includes(resolveDocumentRequirement(item)))) {
       const key = `missing_receipt:${tx.id}`;
       if (!state.tasks.some((item: any) => item.dedupeKey === key && (!context || item.householdId === context.householdId))) state.tasks.push({ id: `task-${key}`, householdId: context?.householdId || tx.householdId || null, type: 'missing_receipt', dedupeKey: key, relatedRecordId: tx.id, title: `חסרה קבלה ל${tx.merchant}`, explanation: `${tx.merchant} · ${tx.amount} ₪`, status: 'open', priority: 'normal', xpReward: 10, deepLink: { route: 'receipt_capture', params: { transactionId: tx.id } } });
     }
