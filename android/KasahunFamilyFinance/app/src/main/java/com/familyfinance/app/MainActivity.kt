@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.familyfinance.app.evidence.FinancialEvidencePersistence
+import com.familyfinance.app.evidence.AlphaDiagnosticsReader
 import com.familyfinance.app.notification.NotificationAccessCard
 import com.familyfinance.app.sms.FinancialEvidenceSyncClient
 import com.familyfinance.app.sms.FinancialEvidenceSyncService
@@ -64,7 +65,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             KasahunFamilyFinanceTheme {
-                WebViewShell()
+                if (intent?.getBooleanExtra("family_finance_diagnostics", false) == true) AlphaDiagnosticsScreen() else WebViewShell()
             }
         }
     }
@@ -72,6 +73,27 @@ class MainActivity : ComponentActivity() {
     override fun onBackPressed() {
         val webView = shellWebView
         if (webView?.canGoBack() == true) webView.goBack() else super.onBackPressed()
+    }
+}
+
+@Composable
+private fun AlphaDiagnosticsScreen() {
+    val context = LocalContext.current
+    val d = remember { runCatching { AlphaDiagnosticsReader.read(context) }.getOrNull() }
+    Scaffold { padding ->
+        Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Alpha diagnostics", style = MaterialTheme.typography.headlineSmall)
+            if (d == null) Text("Storage health: corrupt or unavailable") else {
+                Text("App: ${d.appVersion} · ${d.environment}")
+                Text("Backend host: ${d.backendHost}")
+                Text("Outbox: ${d.outbox.storage} · pending=${d.outbox.pendingCount} · schema=${d.outbox.schemaVersion} · migration=${d.outbox.migrationStatus}")
+                Text("Oldest pending: ${d.outbox.oldestPendingTimestamp ?: "—"}")
+                Text("Workers: ${d.workerStates}")
+                Text("Last sync: ${d.lastSync?.finalOutcome ?: "—"} · session=${d.lastSync?.sessionHttpStatus ?: "—"} · upload=${d.lastSync?.uploadHttpStatus ?: "—"} · failure=${d.lastSync?.sanitizedFailureCategory ?: "—"}")
+                Text("Permissions: SMS=${d.smsPermission}, notifications=${d.notificationsPermission}, listener=${d.listenerEnabled}")
+                Text("Recovery: ${d.recoveryStatus ?: "—"}")
+            }
+        }
     }
 }
 

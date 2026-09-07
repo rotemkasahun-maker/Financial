@@ -57,6 +57,7 @@ android {
         buildConfigField("String", "FAMILY_FINANCE_WEB_URL", "\"$webUrl\"")
         buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_USER", "\"$householdUser\"")
         buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL", "\"$householdCredential\"")
+        buildConfigField("boolean", "FAMILY_FINANCE_ALPHA", alphaBuild.toString())
     }
 
     buildTypes {

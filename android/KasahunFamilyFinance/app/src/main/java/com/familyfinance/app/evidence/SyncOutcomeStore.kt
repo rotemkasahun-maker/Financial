@@ -21,5 +21,10 @@ object SyncOutcomeStore {
         prefs.edit().putString(KEY, next.toString()).apply()
     }
 
+    fun latest(context: Context): SyncOutcome? = runCatching {
+        val item = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]")).optJSONObject(0) ?: return null
+        SyncOutcome(item.optString("hashedEvidenceId"), item.optLong("attemptTimestamp"), item.optString("backendHost").ifBlank { null }, item.optBoolean("sessionAttempted"), item.optInt("sessionHttpStatus").takeIf { item.has("sessionHttpStatus") && !item.isNull("sessionHttpStatus") }, item.optBoolean("uploadAttempted"), item.optInt("uploadHttpStatus").takeIf { item.has("uploadHttpStatus") && !item.isNull("uploadHttpStatus") }, item.optString("sanitizedFailureCategory").ifBlank { null }, item.optString("finalOutcome"))
+    }.getOrNull()
+
     fun hashIdentity(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
 }
