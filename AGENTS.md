@@ -64,6 +64,7 @@ Primary mobile action:
 
 ## Engineering expectations
 - Before any production deploy, APK installation, real-world transaction test, or infrastructure mutation, run the relevant Alpha preflight and require PASS. Do not use real transactions to discover build or configuration prerequisites.
+- Read and follow `docs/PRODUCT_DEVELOPMENT_PROCESS.md`; respect the current maturity stage and release gates. Treat this as both a product-development project and a professional learning process for Rotem. For meaningful work, include a short conceptual explanation of the process, its professional purpose, the relevant term, and transferable learning. Keep it conceptual/practical by default, do not inflate Rotem's experience or imply she personally wrote AI-implemented code, and preserve autonomous execution without extra approval ping-pong.
 - Follow `CODEX_WORKING_RULES.md` for persistent financial-integrity, automation, safety, testing, and delivery conventions.
 - Prefer a simple, maintainable architecture.
 - Add migrations/schema definitions if using a database.
