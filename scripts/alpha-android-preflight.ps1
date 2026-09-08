@@ -31,6 +31,9 @@ if($Build){
   if(!(Test-Path $buildConfig)){throw 'NOT_READY: compiled BuildConfig missing'}
   $compiled=Get-Content $buildConfig -Raw
   if($compiled -notmatch ('FAMILY_FINANCE_BACKEND_URL = "'+[regex]::Escape($expectedBackend)+'"')){throw 'NOT_READY: compiled backend URL is not approved'}
+  if($compiled -match 'FAMILY_FINANCE_CONNECTOR_TOKEN = "local-test-token"' -or $compiled -match 'FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL = "[^" ]+"'){throw 'NOT_READY: packaged Alpha contains prototype auth fallback'}
+  $deviceAuth=Join-Path $android 'app/src/main/java/com/familyfinance/app/auth/DeviceAuthStore.kt'
+  if(!(Test-Path $deviceAuth) -or (Get-Content $deviceAuth -Raw) -notmatch 'AndroidKeyStore'){throw 'NOT_READY: device auth is not Keystore-backed'}
   Write-Output 'APK_BACKEND: approved production URL verified in compiled APK'
 }
 Write-Output 'ALPHA_PREFLIGHT: PASS'

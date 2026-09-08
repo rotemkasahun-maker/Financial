@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -253,6 +253,17 @@ export function createBackend({
           return json(res, 200, result);
         }
 
+        if (req.method === 'POST' && url.pathname === '/api/auth/device/provision') {
+          if (!auth || !trustedSessions) return json(res, 503, { error: 'device_provisioning_not_configured' });
+          const payload = await body(req);
+          const identity = auth.authenticate(payload.userId, payload.credential);
+          if (!identity) return json(res, 401, { error: 'invalid_credentials' });
+          const deviceId = String(payload.deviceId || '').trim();
+          if (!deviceId || deviceId.length > 128) return json(res, 400, { error: 'device_id_required' });
+          const trustedDevice = await trustedSessions.issue(identity);
+          return json(res, 201, { deviceId, trustedDevice, user: identity });
+        }
+
         if (req.method === 'POST' && url.pathname === '/api/auth/renew') {
           if (!trustedSessions || !auth) return json(res, 503, { error: 'trusted_sessions_not_configured' });
           const payload = await body(req); const renewed = await trustedSessions.rotate(payload.trustedDevice);
@@ -269,6 +280,22 @@ export function createBackend({
           if (!auth) return json(res, 503, { error: 'auth_not_configured' });
           try { return json(res, 200, { user: auth.authenticateRequest(req) }); }
           catch { return json(res, 401, { error: 'unauthorized' }); }
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/diagnostics/processed-evidence/check') {
+          if (!auth || !financeRepository || !config.writeFreezeToken || req.headers['x-internal-token'] !== config.writeFreezeToken) return json(res, 401, { error: 'unauthorized' });
+          let operator; try { operator = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
+          const payload = await body(req);
+          const requested = Array.isArray(payload.identities) ? payload.identities.map(value => String(value || '').trim().toLowerCase()) : [];
+          if (requested.length > 1000 || requested.some(value => !/^[a-f0-9]{24}$/.test(value))) return json(res, 400, { error: 'invalid_identity_hashes' });
+          const state = await financeRepository.read();
+          const processed = state.processedEvidence || {};
+          const byHash = new Map(Object.entries(processed).map(([externalSourceId, record]: any) => [createHash('sha256').update(externalSourceId).digest('hex').slice(0, 24), record]));
+          const results = [...new Set(requested)].map(hash => {
+            const record: any = byHash.get(hash);
+            return { hash, matched: Boolean(record), status: record?.status || null, classification: record ? (record.transactionId ? 'LINKED' : 'ACCEPTED') : null };
+          });
+          return json(res, 200, { results });
         }
 
         if (url.pathname === '/api/diagnostics/events' || url.pathname === '/api/diagnostics/recent-events') {
@@ -404,18 +431,6 @@ export function createBackend({
           url.pathname ===
             '/api/ingestion/evidence'
         ) {
-          if (
-            config.connectorSharedToken &&
-            req.headers.authorization !==
-              `Bearer ${config.connectorSharedToken}`
-          ) {
-            return json(
-              res,
-              401,
-              { error: 'unauthorized' }
-            );
-          }
-
           if (!financeDataService) {
             return json(
               res,
@@ -426,6 +441,14 @@ export function createBackend({
 
           let householdContext = null;
           const householdSession = String(req.headers['x-household-session'] || '');
+          const deviceSecret = String(req.headers['x-device-auth'] || '');
+          const connectorAuthorized = Boolean(config.connectorSharedToken && req.headers.authorization === `Bearer ${config.connectorSharedToken}`);
+          let deviceContext = null;
+          if (deviceSecret && trustedSessions) {
+            const identity = await trustedSessions.authenticate(deviceSecret);
+            if (identity) deviceContext = { ...identity, deviceId: req.headers['x-device-id'] || null };
+          }
+          if (!connectorAuthorized && !householdSession && !deviceContext) return json(res, 401, { error: 'unauthorized' });
           if (householdSession) {
             if (!auth) return json(res, 401, { error: 'household_auth_unavailable' });
             try {
@@ -434,11 +457,26 @@ export function createBackend({
               return json(res, 401, { error: 'invalid_household_session' });
             }
           }
+          householdContext = householdContext || deviceContext;
+          if (!connectorAuthorized && !householdContext) return json(res, 401, { error: 'unauthorized' });
 
           const payload = await body(req);
           const result = await ingestionService.processEvidence(payload, householdContext);
 
           return json(res, 200, result);
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/ingestion/synthetic') {
+          if (!auth || !trustedSessions || !diagnosticsStore) return json(res, 503, { error: 'synthetic_ingestion_not_configured' });
+          const deviceSecret = String(req.headers['x-device-auth'] || '');
+          const identity = await trustedSessions.authenticate(deviceSecret);
+          if (!identity) return json(res, 401, { error: 'unauthorized' });
+          const payload = await body(req);
+          const syntheticId = String(payload.syntheticId || '').trim();
+          if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(syntheticId)) return json(res, 400, { error: 'invalid_synthetic_id' });
+          const traceId = `synthetic:${syntheticId}`;
+          const event = await diagnosticsStore.upsert(identity.householdId, { traceId, detectorType: 'sms', stage: 'backend_received', timestamp: new Date().toISOString(), outcome: 'synthetic_acknowledged' });
+          return json(res, 200, { synthetic: true, syntheticId, acknowledged: true, idempotent: Boolean(event) });
         }
 
         if (req.method === 'GET' && url.pathname === '/api/ingestion/staging') {

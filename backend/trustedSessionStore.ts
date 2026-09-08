@@ -29,5 +29,10 @@ export class TrustedSessionStore {
     state.sessions[hash(replacement)] = { ...current, createdAt: Date.now(), expiresAt: Date.now() + this.lifetimeMs, rotatedFrom: key };
     await this.write(state); return { ...current, secret: replacement, expiresAt: state.sessions[hash(replacement)].expiresAt };
   }
+  async authenticate(secret) {
+    const state = await this.read(); const current = state.sessions[hash(secret)];
+    if (!current || current.revokedAt || current.expiresAt < Date.now()) return null;
+    return { userId: current.userId, householdId: current.householdId };
+  }
   async revoke(secret) { const state = await this.read(); const current = state.sessions[hash(secret)]; if (!current) return false; current.revokedAt = Date.now(); await this.write(state); return true; }
 }

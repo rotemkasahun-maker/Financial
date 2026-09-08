@@ -53,10 +53,10 @@ android {
             .orElse(localProperties.getProperty("familyFinanceHouseholdCredential", ""))
             .get()
         buildConfigField("String", "FAMILY_FINANCE_BACKEND_URL", "\"$backendUrl\"")
-        buildConfigField("String", "FAMILY_FINANCE_CONNECTOR_TOKEN", "\"$connectorToken\"")
+        buildConfigField("String", "FAMILY_FINANCE_CONNECTOR_TOKEN", "\"${if (alphaBuild) "" else connectorToken}\"")
         buildConfigField("String", "FAMILY_FINANCE_WEB_URL", "\"$webUrl\"")
-        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_USER", "\"$householdUser\"")
-        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL", "\"$householdCredential\"")
+        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_USER", "\"${if (alphaBuild) "" else householdUser}\"")
+        buildConfigField("String", "FAMILY_FINANCE_HOUSEHOLD_CREDENTIAL", "\"${if (alphaBuild) "" else householdCredential}\"")
         buildConfigField("boolean", "FAMILY_FINANCE_ALPHA", alphaBuild.toString())
     }
 

@@ -15,13 +15,17 @@ object EvidenceSyncWorkScheduler {
     fun uniqueWorkName(externalSourceId: String): String = prefix + stableHash(externalSourceId)
 
     fun schedule(context: Context, externalSourceId: String) {
+        schedule(context, externalSourceId, ExistingWorkPolicy.KEEP)
+    }
+
+    private fun schedule(context: Context, externalSourceId: String, policy: ExistingWorkPolicy) {
         val request = OneTimeWorkRequestBuilder<FinancialEvidenceSyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(Data.Builder().putString("externalSourceId", externalSourceId).build())
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             uniqueWorkName(externalSourceId),
-            ExistingWorkPolicy.KEEP,
+            policy,
             request
         )
     }
@@ -29,7 +33,13 @@ object EvidenceSyncWorkScheduler {
     /** Re-enqueues pending evidence after process start/reboot without changing queue data. */
     fun schedulePending(context: Context) {
         FinancialEvidencePersistence.getQueue(context)
-            .forEach { schedule(context, it.externalSourceId) }
+            .forEach { evidence ->
+                val name = uniqueWorkName(evidence.externalSourceId)
+                val infos = runCatching { WorkManager.getInstance(context).getWorkInfosForUniqueWork(name).get() }.getOrDefault(emptyList())
+                val active = infos.any { !it.state.isFinished }
+                if (!active) schedule(context, evidence.externalSourceId, ExistingWorkPolicy.REPLACE)
+                else schedule(context, evidence.externalSourceId, ExistingWorkPolicy.KEEP)
+            }
     }
 
     private fun stableHash(value: String): String = MessageDigest.getInstance("SHA-256")

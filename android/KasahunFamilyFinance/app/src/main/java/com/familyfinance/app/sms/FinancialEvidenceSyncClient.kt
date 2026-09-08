@@ -4,11 +4,12 @@ import android.util.Log
 import org.json.JSONObject
 import com.familyfinance.app.evidence.SyncOutcome
 import com.familyfinance.app.evidence.SyncOutcomeStore
+import com.familyfinance.app.auth.DeviceAuthStore
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig, private val outcomeObserver: (SyncOutcome) -> Unit = {}) {
+open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig, private val deviceAuth: DeviceAuthStore? = null, private val outcomeObserver: (SyncOutcome) -> Unit = {}) {
 
     /**
      * Sends a financial evidence payload to the backend.
@@ -21,14 +22,18 @@ open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig, 
         var uploadStatus: Int? = null
         var sessionAttempted = false
         return try {
-            sessionAttempted = config.householdUser.isNotBlank() && config.householdCredential.isNotBlank()
-            val householdSession = postHouseholdSession { sessionStatus = it }
+            val auth = deviceAuth?.read() ?: return false.also { emit(payload, started, false, null, false, null, "AUTH_NOT_PROVISIONED", false) }
+            sessionAttempted = true
+            val renewed = renewDeviceSession(auth.secret, auth.deviceId) { sessionStatus = it }
+            val householdSession = renewed?.first
+            renewed?.second?.let { deviceAuth.save(com.familyfinance.app.auth.DeviceAuth(auth.deviceId, it)) }
             val url = URL("${config.backendUrl}/api/ingestion/evidence")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("Authorization", "Bearer ${config.connectorToken}")
+            connection.setRequestProperty("X-Device-Auth", auth.secret)
+            connection.setRequestProperty("X-Device-Id", auth.deviceId)
             householdSession?.let { connection.setRequestProperty("X-Household-Session", it) }
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
@@ -47,30 +52,29 @@ open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig, 
             success
         } catch (e: Exception) {
             Log.e(TAG, "Error sending evidence to backend", e)
-            emit(payload, started, sessionAttempted, sessionStatus, uploadStatus != null, uploadStatus, category(e), false)
+            emit(payload, started, sessionAttempted, sessionStatus, uploadStatus != null, uploadStatus, category(sessionStatus, e), false)
             false
         } finally {
             connection?.disconnect()
         }
     }
 
-    private fun postHouseholdSession(onStatus: (Int) -> Unit = {}): String? {
-        if (config.householdUser.isBlank() || config.householdCredential.isBlank()) return null
-        val connection = URL("${config.backendUrl}/api/auth/session").openConnection() as HttpURLConnection
+    private fun renewDeviceSession(secret: String, deviceId: String, onStatus: (Int) -> Unit = {}): Pair<String, String>? {
+        val connection = URL("${config.backendUrl}/api/auth/renew").openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
-            val request = JSONObject()
-                .put("userId", config.householdUser)
-                .put("credential", config.householdCredential)
+            connection.setRequestProperty("X-Device-Id", deviceId)
+            val request = JSONObject().put("trustedDevice", secret)
             OutputStreamWriter(connection.outputStream).use { it.write(request.toString()) }
             val status = connection.responseCode
             onStatus(status)
             check(status in 200..299) { "Household authentication failed" }
-            JSONObject(connection.inputStream.bufferedReader().readText()).getString("session")
+            val result = JSONObject(connection.inputStream.bufferedReader().readText())
+            result.getString("session") to result.getJSONObject("trustedDevice").getString("secret")
         } finally {
             connection.disconnect()
         }
@@ -78,7 +82,7 @@ open class FinancialEvidenceSyncClient(private val config: FinancialSyncConfig, 
 
     private fun emit(payload: JSONObject, timestamp: Long, sessionAttempted: Boolean, sessionStatus: Int?, uploadAttempted: Boolean, uploadStatus: Int?, failure: String?, success: Boolean) { val id = payload.optString("externalSourceId", "unknown"); outcomeObserver(SyncOutcome(SyncOutcomeStore.hashIdentity(id), timestamp, runCatching { URL(config.backendUrl).host }.getOrNull(), sessionAttempted, sessionStatus, uploadAttempted, uploadStatus, failure, if (success) "SUCCESS" else "FAILURE")) }
     private fun category(status: Int?): String? = status?.let { if (it == 401 || it == 403) "AUTH_FAILED" else if (it >= 500) "HTTP_5XX" else "HTTP_${it}" }
-    private fun category(error: Exception): String = when (error) { is java.net.SocketTimeoutException -> "TIMEOUT"; is java.net.UnknownHostException -> "DNS_FAILURE"; is javax.net.ssl.SSLException -> "TLS_FAILURE"; else -> "UNKNOWN_NETWORK" }
+    private fun category(sessionStatus: Int?, error: Exception): String = sessionStatus?.let { if (it == 401 || it == 403) "AUTH_FAILED" else if (it >= 500) "HTTP_5XX" else "HTTP_${it}" } ?: when (error) { is java.net.SocketTimeoutException -> "TIMEOUT"; is java.net.UnknownHostException -> "DNS_FAILURE"; is javax.net.ssl.SSLException -> "TLS_FAILURE"; else -> "UNKNOWN_NETWORK" }
 
     companion object {
         private const val TAG = "FinancialSyncClient"
