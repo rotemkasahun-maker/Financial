@@ -31,7 +31,8 @@ import {
 } from './googleOidc.ts';
 
 import {
-  processReceiptPdf
+  processReceiptPdf,
+  processReceiptImage
 } from './receiptProcessingService.ts';
 
 import {
@@ -283,7 +284,7 @@ export function createBackend({
         }
 
         if (req.method === 'POST' && url.pathname === '/api/diagnostics/processed-evidence/check') {
-          if (!auth || !financeRepository || !config.writeFreezeToken || req.headers['x-internal-token'] !== config.writeFreezeToken) return json(res, 401, { error: 'unauthorized' });
+          if (!auth || !financeRepository || !config.processedEvidenceOperatorToken || req.headers['x-internal-token'] !== config.processedEvidenceOperatorToken) return json(res, 401, { error: 'unauthorized' });
           let operator; try { operator = auth.authenticateRequest(req); } catch { return json(res, 401, { error: 'unauthorized' }); }
           const payload = await body(req);
           const requested = Array.isArray(payload.identities) ? payload.identities.map(value => String(value || '').trim().toLowerCase()) : [];
@@ -508,10 +509,10 @@ export function createBackend({
               .trim()
               .toLowerCase();
 
-          if (
-            contentType !==
-            'application/pdf'
-          ) {
+          const isPdf = contentType === 'application/pdf';
+          const isImage = /^image\/(jpeg|png)$/.test(contentType);
+
+          if (!isPdf && !isImage) {
             return json(
               res,
               415,
@@ -522,11 +523,11 @@ export function createBackend({
             );
           }
 
-          const pdfBytes =
+          const bytes =
             await binaryBody(req);
 
           if (
-            pdfBytes.length === 0
+            bytes.length === 0
           ) {
             return json(
               res,
@@ -538,10 +539,16 @@ export function createBackend({
             );
           }
 
-          const result =
-            await processReceiptPdf(
-              pdfBytes
-            );
+          let result;
+
+          if (isPdf) {
+            result =
+              await processReceiptPdf(
+                bytes
+              );
+          } else {
+            result = await processReceiptImage(bytes);
+          }
 
           if (
             result.status ===

@@ -1,4 +1,5 @@
 import { extractPdfText } from './pdfTextExtractor.ts';
+import { extractImageText } from './imageTextExtractor.ts';
 import {
   extractReceiptWithAi,
   type AiReceiptExtraction
@@ -7,6 +8,12 @@ import {
   validateReceiptExtraction,
   type ReceiptValidationResult
 } from './receiptValidator.ts';
+
+export type ReceiptImageProcessingDeps = {
+  extractImageTextFn?: typeof extractImageText;
+  extractReceiptWithAiFn?: typeof extractReceiptWithAi;
+  validateReceiptExtractionFn?: typeof validateReceiptExtraction;
+};
 
 export type ReceiptProcessingResult = {
   status:
@@ -94,6 +101,73 @@ export async function processReceiptPdf(
         error instanceof Error
           ? error.message
           : 'Unknown receipt processing error'
+    };
+  }
+}
+
+export async function processReceiptImage(
+  imageBytes: Uint8Array,
+  deps: ReceiptImageProcessingDeps = {}
+): Promise<ReceiptProcessingResult> {
+  const extractImageTextFn =
+    deps.extractImageTextFn ?? extractImageText;
+  const extractReceiptWithAiFn =
+    deps.extractReceiptWithAiFn ?? extractReceiptWithAi;
+  const validateReceiptExtractionFn =
+    deps.validateReceiptExtractionFn ?? validateReceiptExtraction;
+
+  try {
+    if (!(imageBytes instanceof Uint8Array) || imageBytes.length === 0) {
+      throw new TypeError(
+        'processReceiptImage expects non-empty image bytes'
+      );
+    }
+
+    const textResult = await extractImageTextFn(imageBytes);
+    const rawText = textResult.rawText?.trim() ?? '';
+
+    if (!rawText) {
+      return {
+        status: 'processing_failed',
+        extraction: null,
+        validation: null,
+        document: {
+          pageCount: 1,
+          hasTextLayer: false,
+          usedOcr: true,
+          textLength: 0
+        },
+        error: 'No readable text could be extracted from image'
+      };
+    }
+
+    const extraction = await extractReceiptWithAiFn(rawText);
+    const validation = validateReceiptExtractionFn(extraction);
+
+    return {
+      status: validation.safeForAutomaticSave
+        ? 'ready_for_automatic_save'
+        : 'review_required',
+      extraction,
+      validation,
+      document: {
+        pageCount: 1,
+        hasTextLayer: false,
+        usedOcr: true,
+        textLength: rawText.length
+      },
+      error: null
+    };
+  } catch (error) {
+    return {
+      status: 'processing_failed',
+      extraction: null,
+      validation: null,
+      document: null,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unknown image processing error'
     };
   }
 }

@@ -72,3 +72,16 @@ Primary mobile action:
 - Do not hardcode secrets.
 - Add tests for financial classification and deduplication logic.
 - Add realistic seed/demo data that contains no sensitive real account identifiers.
+
+### NO-SOLUTION-BEFORE-INVENTORY
+Before proposing or implementing a technical solution:
+1. Inspect the existing end-to-end path
+2. Inventory relevant existing services, libraries, adapters, APIs, tests, and infrastructure
+3. Identify the authoritative existing primitive
+4. Identify the exact missing boundary
+5. Only then design the smallest compatible change
+
+Never prescribe a new mechanism merely from filenames, naming patterns, assumptions, or analogy with another code path. Prefer: existing repo primitive → mature existing dependency → compatible extension → new custom mechanism only if necessary. If the required primitive has not been inspected, classify the implementation choice as UNKNOWN.
+
+### DIAGNOSIS ≠ DESIGN
+Proving a root cause does not prove the correct implementation. A solution recommendation must have its own evidence based on inspected existing capabilities.
