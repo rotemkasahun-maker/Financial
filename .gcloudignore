@@ -1,0 +1,34 @@
+# Keep local/generated tooling out of the Cloud Build context.
+.gradle-local/
+.android-local/
+.android-home/
+.android-adb-home/
+.codex-worktrees/
+.local/
+node_modules/
+.git/
+.idea/
+tmp/
+temp/
+coverage/
+dist/
+build/
+
+# Local-only private and environment material.
+.env
+.env.*
+!.env.example
+private-data/
+historical-data/
+uploads/
+*.log
+*.tmp
+*.temp
+
+# Untracked donor/preview/snapshot directories
+portfolio-v17-snapshot-repo/
+motionfolio-donor-preview/
+angie-donor-preview/
+portfolio-evidence/
+FAMILY_FINANCE_*.md
+Family_Finance_*.md

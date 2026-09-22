@@ -23,7 +23,15 @@ const STUB_EXTRACTION = {
   cardLast4: null,
   vat: null,
   subtotalBeforeVat: null,
-  items: [],
+  items: [
+    {
+      name: 'TEST ITEM',
+      quantity: 1,
+      unitPrice: '42.50',
+      totalPrice: '42.50',
+      discount: null
+    }
+  ],
   confidence: 0.95,
   warnings: []
 };
@@ -48,6 +56,9 @@ test('meaningful OCR - synthetic receipt PNG returns non-empty text with expecte
       assert.ok(rawText.length > 0, 'OCR output should be non-empty');
       assert.ok(fragmentFound(rawText), `OCR output missing expected fragment: ${rawText}`);
       return STUB_EXTRACTION;
+    },
+    extractReceiptFromImageWithAiFn: async () => {
+      throw new Error('Vision fallback should not run for complete stub items');
     }
   });
 
@@ -64,6 +75,9 @@ test('image handler path - processReceiptImage maps OCR to structured response',
     extractReceiptWithAiFn: async rawText => {
       aiInput = rawText;
       return STUB_EXTRACTION;
+    },
+    extractReceiptFromImageWithAiFn: async () => {
+      throw new Error('Vision fallback should not run for complete stub items');
     }
   });
 
@@ -74,6 +88,16 @@ test('image handler path - processReceiptImage maps OCR to structured response',
   assert.equal(result.extraction?.total, '42.50');
   assert.equal(result.document?.usedOcr, true);
   assert.equal(result.error, null);
+  assert.ok(result.diagnostics, 'image diagnostics should be present');
+  assert.equal(result.diagnostics.ocr.usedOcr, true);
+  assert.ok(result.diagnostics.ocr.textLength > 0);
+  assert.equal(result.diagnostics.extraction.populatedCoreFieldCount, 3);
+  assert.equal(typeof result.diagnostics.ocr.plausibleDatePresent, 'boolean');
+  assert.equal(typeof result.diagnostics.ocr.plausibleAmountPresent, 'boolean');
+  assert.equal(
+    JSON.stringify(result.diagnostics).includes('TEST MARKET'),
+    false
+  );
 });
 
 test('image handler path - /api/receipts/analyze executes production image branch', async () => {

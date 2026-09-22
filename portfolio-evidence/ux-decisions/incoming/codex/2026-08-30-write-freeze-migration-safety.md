@@ -1,0 +1,12 @@
+# Incoming UX/Product Decision Packet: Write freeze before encrypted-state migration
+
+- **Primary outcome:** `NEW_DECISION` candidate / likely `MERGE_INTO_EXISTING` with `shared-canonical-household-state` and `real-world-financial-state-validation-before-exposure`.
+- **Decision type:** System Trust / Product Architecture
+- **USER-STATED NEED:** During cloud migration planning, preserve existing household state and prevent writes while encrypted state is being rotated or migrated; do not risk silent loss or divergence.
+- **DESIGN INFERENCE:** Because a migration window can make concurrent writes unsafe or unreadable, the system should expose one authenticated internal write-freeze control and enforce it at every canonical repository mutation boundary. Reads remain available; blocked writes fail explicitly so clients can retry rather than silently dropping household work.
+- **IMPLEMENTED:** `WriteFreezeController` with `NORMAL`/`WRITE_FROZEN` modes; Gmail and finance repositories assert writability before `write`/`update`; backend construction shares one controller; authenticated internal status/activation/release route added; frozen mutations map to HTTP 423. No live activation was performed.
+- **VERIFIED:** Focused synthetic repository tests pass (2/2), including blocked Gmail/finance writes, read preservation, release, and idempotence. Static write-path audit found canonical repository mutation boundaries guarded. Live backend restart, activation, client-device retry behavior, and real migration remain unverified.
+- **Evidence:** `backend/writeFreeze.ts`, `backend/storage.ts`, `backend/financeStorage.ts`, `backend/server.ts`, `backend/config.ts`, `tests/writeFreeze.test.mjs`; `node --test tests/writeFreeze.test.mjs` (2/2 PASS); `git diff --check` PASS. Existing canonical records: `decisions/shared-canonical-household-state/decision.md`, `decisions/real-world-financial-state-validation-before-exposure/decision.md`.
+- **Rejected/failed approaches:** No direct state mutation, no secret generation, no live restart/rotation, no bypass of authentication, and no client-side parallel freeze model.
+- **Limitations:** This packet does not claim production migration safety or full client retry proof. The live process still requires a controlled restart before the new route/guards are active.
+- **Evidence visibility:** Source/tests are public-safe; household state, credentials, tokens, and live runtime details remain private/non-public.

@@ -34,6 +34,7 @@ import {
   processReceiptPdf,
   processReceiptImage
 } from './receiptProcessingService.ts';
+import { logReceiptAnalyzeDiagnostics } from './receiptDiagnostics.ts';
 
 import {
   ReceiptIngestionService
@@ -548,6 +549,10 @@ export function createBackend({
               );
           } else {
             result = await processReceiptImage(bytes);
+          }
+
+          if (result.diagnostics) {
+            logReceiptAnalyzeDiagnostics(result.diagnostics);
           }
 
           if (

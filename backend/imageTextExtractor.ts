@@ -1,4 +1,5 @@
-import { createWorker } from 'tesseract.js';
+import { createWorker, PSM } from 'tesseract.js';
+import { preprocessReceiptImage } from './imageOcrPreprocess.ts';
 
 type ExtractImageTextResult = {
   rawText: string;
@@ -15,7 +16,20 @@ export async function extractImageText(
   const worker = await createWorker(['heb', 'eng']);
 
   try {
-    const result = await worker.recognize(bytes);
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+      preserve_interword_spaces: '1'
+    });
+
+    let ocrInput: Uint8Array = bytes;
+
+    try {
+      ocrInput = await preprocessReceiptImage(bytes);
+    } catch {
+      ocrInput = bytes;
+    }
+
+    const result = await worker.recognize(ocrInput);
     const text = result.data.text?.trim() || '';
 
     return {

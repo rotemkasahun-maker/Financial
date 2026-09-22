@@ -8,11 +8,22 @@ import {
   validateReceiptExtraction,
   type ReceiptValidationResult
 } from './receiptValidator.ts';
+import {
+  buildReceiptAnalyzeDiagnostics,
+  type ReceiptAnalyzeDiagnostics,
+  type ProcessingTimingsMs
+} from './receiptDiagnostics.ts';
+import {
+  applyItemVisionFallback,
+  type ItemVisionFallbackDeps
+} from './receiptItemVisionFallback.ts';
 
 export type ReceiptImageProcessingDeps = {
   extractImageTextFn?: typeof extractImageText;
   extractReceiptWithAiFn?: typeof extractReceiptWithAi;
   validateReceiptExtractionFn?: typeof validateReceiptExtraction;
+  extractReceiptFromImageWithAiFn?: ItemVisionFallbackDeps['extractReceiptFromImageWithAiFn'];
+  visionTimeoutMs?: number;
 };
 
 export type ReceiptProcessingResult = {
@@ -32,6 +43,8 @@ export type ReceiptProcessingResult = {
   } | null;
 
   error: string | null;
+
+  diagnostics: ReceiptAnalyzeDiagnostics | null;
 };
 
 export async function processReceiptPdf(
@@ -62,7 +75,8 @@ export async function processReceiptPdf(
           usedOcr: document.usedOcr,
           textLength: 0
         },
-        error: 'No readable text could be extracted from receipt'
+        error: 'No readable text could be extracted from receipt',
+        diagnostics: null
       };
     }
 
@@ -89,7 +103,8 @@ export async function processReceiptPdf(
         textLength: rawText.length
       },
 
-      error: null
+      error: null,
+      diagnostics: null
     };
   } catch (error) {
     return {
@@ -100,7 +115,8 @@ export async function processReceiptPdf(
       error:
         error instanceof Error
           ? error.message
-          : 'Unknown receipt processing error'
+          : 'Unknown receipt processing error',
+      diagnostics: null
     };
   }
 }
@@ -116,6 +132,10 @@ export async function processReceiptImage(
   const validateReceiptExtractionFn =
     deps.validateReceiptExtractionFn ?? validateReceiptExtraction;
 
+  const startedAt = performance.now();
+  const timingsMs: ProcessingTimingsMs = {};
+  let rawText = '';
+
   try {
     if (!(imageBytes instanceof Uint8Array) || imageBytes.length === 0) {
       throw new TypeError(
@@ -123,10 +143,14 @@ export async function processReceiptImage(
       );
     }
 
+    const ocrStartedAt = performance.now();
     const textResult = await extractImageTextFn(imageBytes);
-    const rawText = textResult.rawText?.trim() ?? '';
+    timingsMs.ocr = performance.now() - ocrStartedAt;
+    rawText = textResult.rawText?.trim() ?? '';
 
     if (!rawText) {
+      timingsMs.total = performance.now() - startedAt;
+
       return {
         status: 'processing_failed',
         extraction: null,
@@ -137,17 +161,44 @@ export async function processReceiptImage(
           usedOcr: true,
           textLength: 0
         },
-        error: 'No readable text could be extracted from image'
+        error: 'No readable text could be extracted from image',
+        diagnostics: buildReceiptAnalyzeDiagnostics({
+          rawText: '',
+          usedOcr: true,
+          extraction: null,
+          validation: null,
+          timingsMs
+        })
       };
     }
 
-    const extraction = await extractReceiptWithAiFn(rawText);
-    const validation = validateReceiptExtractionFn(extraction);
+    const aiStartedAt = performance.now();
+    const ocrExtraction = await extractReceiptWithAiFn(rawText);
+    timingsMs.ai = performance.now() - aiStartedAt;
+
+    const fallback = await applyItemVisionFallback(ocrExtraction, imageBytes, {
+      extractReceiptFromImageWithAiFn: deps.extractReceiptFromImageWithAiFn,
+      timeoutMs: deps.visionTimeoutMs
+    });
+    const extraction = fallback.extraction;
+
+    const validationStartedAt = performance.now();
+    let validation = validateReceiptExtractionFn(extraction);
+    if (fallback.forceReview) {
+      validation = {
+        ...validation,
+        safeForAutomaticSave: false,
+        requiresReview: true
+      };
+    }
+    timingsMs.validation = performance.now() - validationStartedAt;
+    timingsMs.total = performance.now() - startedAt;
 
     return {
-      status: validation.safeForAutomaticSave
-        ? 'ready_for_automatic_save'
-        : 'review_required',
+      status:
+        fallback.forceReview || !validation.safeForAutomaticSave
+          ? 'review_required'
+          : 'ready_for_automatic_save',
       extraction,
       validation,
       document: {
@@ -156,9 +207,18 @@ export async function processReceiptImage(
         usedOcr: true,
         textLength: rawText.length
       },
-      error: null
+      error: null,
+      diagnostics: buildReceiptAnalyzeDiagnostics({
+        rawText,
+        usedOcr: true,
+        extraction,
+        validation,
+        timingsMs
+      })
     };
   } catch (error) {
+    timingsMs.total = performance.now() - startedAt;
+
     return {
       status: 'processing_failed',
       extraction: null,
@@ -167,7 +227,16 @@ export async function processReceiptImage(
       error:
         error instanceof Error
           ? error.message
-          : 'Unknown image processing error'
+          : 'Unknown image processing error',
+      diagnostics: rawText
+        ? buildReceiptAnalyzeDiagnostics({
+            rawText,
+            usedOcr: true,
+            extraction: null,
+            validation: null,
+            timingsMs
+          })
+        : null
     };
   }
 }
